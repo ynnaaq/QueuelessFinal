@@ -1,0 +1,26 @@
+.login-page,.student-app,.staff-app,.admin-app { min-height: 100svh; color: var(--ink); }
+
+.feature-notice {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #cfefe9;
+  border-radius: 12px;
+  background: var(--mint-soft);
+  color: #087b70;
+  font-size: 14px;
+}
+.feature-notice button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 20px; line-height: 1; }
+
+.live-indicator { display: inline-flex; align-items: center; gap: 7px; color: #0a8d80; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.live-indicator::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #13a998; box-shadow: 0 0 0 4px #13a99818; }
+
+.float-kicker { margin: 0; color: var(--brand); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.no-data { margin: 0; padding: 28px 20px; color: var(--muted); text-align: center; }
+
+@media (max-width: 720px) {
+  .feature-notice { margin-bottom: 14px; font-size: 13px; }
+}

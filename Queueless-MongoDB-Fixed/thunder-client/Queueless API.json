@@ -1,0 +1,108 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "Queueless Local API",
+  "dateExported": "2026-09-23T00:00:00.000Z",
+  "version": "1.1",
+  "folders": [],
+  "requests": [
+    {
+      "_id": "health",
+      "colId": "queueless-local",
+      "name": "Health",
+      "url": "http://localhost:3001/api/health",
+      "method": "GET",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "" }
+    },
+    {
+      "_id": "student-login",
+      "colId": "queueless-local",
+      "name": "Student login",
+      "url": "http://localhost:3001/api/auth/login",
+      "method": "POST",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"email\": \"maria@student.edu\",\n  \"password\": \"student123\"\n}" }
+    },
+    {
+      "_id": "staff-login",
+      "colId": "queueless-local",
+      "name": "Staff login",
+      "url": "http://localhost:3001/api/auth/login",
+      "method": "POST",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"email\": \"staff@school.edu\",\n  \"password\": \"staff123\"\n}" }
+    },
+    {
+      "_id": "admin-login",
+      "colId": "queueless-local",
+      "name": "Admin login",
+      "url": "http://localhost:3001/api/auth/login",
+      "method": "POST",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"email\": \"admin@school.edu\",\n  \"password\": \"admin123\"\n}" }
+    },
+    {
+      "_id": "portal-state",
+      "colId": "queueless-local",
+      "name": "Portal state",
+      "url": "http://localhost:3001/api/portal/state",
+      "method": "GET",
+      "headers": [{ "name": "Authorization", "value": "Bearer PASTE_TOKEN_HERE" }],
+      "params": [],
+      "body": { "type": "none", "raw": "" }
+    },
+    {
+      "_id": "create-ticket",
+      "colId": "queueless-local",
+      "name": "Student create ticket",
+      "url": "http://localhost:3001/api/tickets",
+      "method": "POST",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer PASTE_STUDENT_TOKEN_HERE" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"officeId\": \"Registrar\",\n  \"service\": \"Transcript / school records\"\n}" }
+    },
+    {
+      "_id": "staff-action",
+      "colId": "queueless-local",
+      "name": "Staff serve ticket",
+      "url": "http://localhost:3001/api/tickets/PASTE_TICKET_ID_HERE/action",
+      "method": "POST",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer PASTE_STAFF_TOKEN_HERE" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"action\": \"serve\"\n}" }
+    },
+    {
+      "_id": "admin-office",
+      "colId": "queueless-local",
+      "name": "Admin update office",
+      "url": "http://localhost:3001/api/offices/reg",
+      "method": "PATCH",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer PASTE_ADMIN_TOKEN_HERE" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "params": [],
+      "body": { "type": "json", "raw": "{\n  \"open\": true\n}" }
+    },
+    {
+      "_id": "logout",
+      "colId": "queueless-local",
+      "name": "Logout",
+      "url": "http://localhost:3001/api/auth/logout",
+      "method": "POST",
+      "headers": [{ "name": "Authorization", "value": "Bearer PASTE_TOKEN_HERE" }],
+      "params": [],
+      "body": { "type": "none", "raw": "" }
+    }
+  ]
+}
