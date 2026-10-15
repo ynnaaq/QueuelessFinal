@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import express from 'express'
 import mongoose from 'mongoose'
-
+import cors from 'cors'
 import User from './models/User.js'
 import Office from './models/Office.js'
 import Ticket from './models/Ticket.js'
@@ -40,7 +40,11 @@ const fail = (
     }
   )
 }
-
+const app = express(app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+  })
+))
 
 const text = (
   value,

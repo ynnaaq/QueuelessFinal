@@ -13,11 +13,11 @@ const { app, initialize } = createApp({
 
 await initialize()
 
-const port = Number(process.env.PORT || 3001)
+const PORT = Number(process.env.PORT) || 3001
 const host = process.env.HOST || '127.0.0.1'
 
-const server = app.listen(port, host, () => {
-  console.log(`Queueless API: http://localhost:${port}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Queueless API listening on port ${PORT}`)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

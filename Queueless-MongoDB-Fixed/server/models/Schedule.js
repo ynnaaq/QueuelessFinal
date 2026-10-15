@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose'
 
 const shiftSchema = new mongoose.Schema(
@@ -25,7 +26,6 @@ const scheduleSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
 
     office: {
@@ -44,6 +44,7 @@ const scheduleSchema = new mongoose.Schema(
   }
 )
 
+// Each staff member can have only one schedule document
 scheduleSchema.index(
   { staffId: 1 },
   { unique: true }
