@@ -1,10 +1,13 @@
+
 import 'dotenv/config'
 import mongoose from 'mongoose'
 import { connectDB } from './db.js'
 import { createApp } from './app.js'
 
+// Connect to MongoDB Atlas
 await connectDB()
 
+// Initialize Express application
 const { app, initialize } = createApp({
   seedDemo: process.env.SEED_DEMO === 'true',
   adminEmail: process.env.ADMIN_EMAIL,
@@ -14,12 +17,13 @@ const { app, initialize } = createApp({
 await initialize()
 
 const PORT = Number(process.env.PORT) || 3001
-const host = process.env.HOST || '127.0.0.1'
+const HOST = process.env.HOST || '0.0.0.0'
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Queueless API listening on port ${PORT}`)
+const server = app.listen(PORT, HOST, () => {
+  console.log(`Queueless API listening on ${HOST}:${PORT}`)
 })
 
+// Graceful shutdown
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     server.close(async () => {

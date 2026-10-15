@@ -40,11 +40,15 @@ const fail = (
     }
   )
 }
-const app = express(app.use(
+
+const app = express()
+
+app.use(
   cors({
     origin: process.env.FRONTEND_URL,
   })
-))
+)
+
 
 const text = (
   value,
