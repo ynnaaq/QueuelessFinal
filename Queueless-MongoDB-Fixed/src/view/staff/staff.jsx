@@ -83,7 +83,7 @@ export default function Staff({ onLogout, user, token }) {
   return (
     <main className="staff-app">
       <aside className="staff-sidebar">
-        <div className="staff-brand"><span className="staff-mark"><i/><i/><i/></span><div><b>Queueless</b><small>Staff workspace</small></div></div>
+        <div className="staff-brand"><img className="staff-mark" src="/queue-logo.png" alt="" /><div><b>Queueless</b><small>Staff workspace</small></div></div>
         <nav>{tabs.map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => setPage(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</nav>
         <div className="staff-account"><span>{initials(user?.name || 'Ana Reyes')}</span><p><b>{user?.name || 'Ana Reyes'}</b><small>Service staff</small></p><button onClick={onLogout}>⇥</button></div>
       </aside>

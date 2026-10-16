@@ -138,6 +138,34 @@ export async function login(email, password) {
   })
 }
 
+export async function requestPasswordReset(email) {
+  return api('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  })
+}
+
+export async function resetPassword(email, code, password) {
+  return api('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, password }),
+  })
+}
+
+export async function verifyEmail(email, code) {
+  return api('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  })
+}
+
+export async function resendVerification(email) {
+  return api('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
 export async function register(account) {
   return api('/api/auth/register', {
     method: 'POST',

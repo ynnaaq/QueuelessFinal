@@ -52,6 +52,10 @@ Authenticated requests use `Authorization: Bearer <token>` and JSON bodies. Erro
 | GET | /api/health | Public health check |
 | POST | /api/auth/register | Public; name, email, password, accountId, role student or staff; students require accountId, staff require office; optional department/yearLevel |
 | POST | /api/auth/login | Public; email, password; returns token and user |
+| POST | /api/auth/verify-email | Public; email and six-digit code; activates an account email |
+| POST | /api/auth/resend-verification | Public; email; sends a new account-verification code when required |
+| POST | /api/auth/forgot-password | Public; email; sends a six-digit reset code when the account exists |
+| POST | /api/auth/reset-password | Public; email, six-digit reset code, and replacement password |
 | GET | /api/auth/me | Any signed-in account |
 | POST | /api/auth/logout | Invalidate current session |
 | PATCH | /api/auth/profile | name, email, department, yearLevel, optional password |
@@ -79,6 +83,12 @@ npm run build
 
 Tests use isolated databases and cover authentication, role enforcement, student-data privacy, office assignments, concurrent joins, FIFO transitions, feedback, suspension, profile updates, logout, date reservations, and restart persistence. They do not modify your working database.
 
-The previous MongoDB models, seed script, and prototype JSON files are legacy files and are no longer used by `npm run server`. Existing MongoDB/JSON accounts and tickets are **not automatically migrated**. Keep those files if you need to migrate their contents. Do not run the old MongoDB seed script against data you need to preserve. The unused `students.jsx` prototype is not the routed student portal; `studentPortal.jsx` is the integrated screen.
+## Password reset email
 
-For deployment, serve the built frontend and `/api` under the same HTTPS origin, set a non-demo database and admin credentials, and arrange database backups. The API binds to `127.0.0.1` by default; configure `HOST` only when external API access is intended. Email password recovery and push notifications are not implemented.
+To deliver real verification and password-reset codes, configure these server environment variables: `SMTP_HOST`, `SMTP_PORT` (usually `587`), `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM`. New accounts cannot sign in until the recipient verifies their email with a six-digit code. Recovery codes expire after 10 minutes, allow at most five incorrect attempts, and resetting a password signs out every existing session. Use an SMTP provider account intended for transactional email; do not expose its credentials in frontend variables.
+
+## Security controls
+
+Queueless validates every API input, uses salted `scrypt` password hashes, stores only hashes of opaque session tokens and OTPs, and applies role checks to student, staff, and admin actions. Authentication endpoints are throttled; verification and recovery codes also expire after 10 minutes and lock after five invalid attempts. Account registration requires privacy-notice consent, and the system keeps only the account information needed for campus queue services. Responses include anti-clickjacking, MIME-sniffing, referrer, permissions, CSP, and HTTPS/HSTS protections. Deploy behind HTTPS and set `FRONTEND_URL` to the exact approved frontend origin.
+
+For deployment, serve the built frontend and `/api` under the same HTTPS origin, set a non-demo database and admin credentials, and arrange database backups. The API binds to `127.0.0.1` by default; configure `HOST` only when external API access is intended.

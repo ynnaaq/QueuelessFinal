@@ -158,7 +158,7 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
   return (
     <main className="student-app">
       <aside className="student-sidebar">
-        <div className="student-logo"><span className="student-mark"><i /><i /><i /></span><span>Queueless<small>Student portal</small></span></div>
+        <div className="student-logo"><img className="student-mark" src="/queue-logo.png" alt="" /><span>Queueless<small>Student portal</small></span></div>
         <nav>{nav.map(([icon, label]) => <button type="button" title={label} aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => go(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'My Queue' && queue && <em>1</em>}</button>)}</nav>
         <div className="account"><span>{initials(profile.name)}</span><p><b>{profile.name}</b><small>{profile.id}</small></p><button onClick={onLogout} title="Sign out">⇥</button></div>
       </aside>

@@ -8,7 +8,7 @@ import Ticket from './models/Ticket.js'
 import Session from './models/Session.js'
 import Feedback from './models/Feedback.js'
 import Schedule from './models/Schedule.js'
-
+import { sendEmailOtp } from './emailService.js'
 
 const activeStatuses = [
   'waiting',
@@ -18,6 +18,12 @@ const activeStatuses = [
 
 const sessionLifetimeMs =
   7 * 24 * 60 * 60 * 1000
+
+const passwordResetLifetimeMs =
+  10 * 60 * 1000
+
+const emailVerificationLifetimeMs =
+  10 * 60 * 1000
 
 
 const today = () =>
@@ -87,6 +93,17 @@ const emailValue = (value) => {
   }
 
   return email
+}
+
+
+const nameValue = (value) => {
+  const name = text(value, 'Full name', 120)
+
+  if (!/^[\p{L}][\p{L}' -]*$/u.test(name)) {
+    fail('Full name can contain letters, spaces, apostrophes, and hyphens only.')
+  }
+
+  return name
 }
 
 
@@ -238,6 +255,12 @@ const publicUser = (user) => {
         }
 
   delete raw.passwordHash
+  delete raw.emailVerificationCodeHash
+  delete raw.emailVerificationExpiresAt
+  delete raw.emailVerificationAttempts
+  delete raw.resetPasswordTokenHash
+  delete raw.resetPasswordExpiresAt
+  delete raw.resetPasswordAttempts
 
   const id = String(
     raw._id ||
@@ -478,6 +501,8 @@ async function seedAdmin(
 
           status:
             'Active',
+
+          emailVerified: true,
         },
       },
       {
@@ -575,6 +600,8 @@ async function seedAdmin(
 
             status:
               'Active',
+
+            emailVerified: true,
           },
         },
         {
@@ -818,9 +845,29 @@ export function createApp({
     express()
 
 
+  app.set('trust proxy', 1)
+
   app.disable(
     'x-powered-by'
   )
+
+
+  app.use((req, res, next) => {
+    res.set({
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+    })
+    if (req.secure || req.get('x-forwarded-proto') === 'https') {
+      res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    }
+    next()
+  })
+
+
+  app.use(cors({ origin: process.env.FRONTEND_URL || false }))
 
 
   app.use(
@@ -849,6 +896,26 @@ export function createApp({
 
   const attempts =
     new Map()
+
+  const sensitiveAttempts = new Map()
+
+
+  const sendEmailCode = sendEmailOtp
+
+  const newOtp = () => String(crypto.randomInt(0, 1_000_000)).padStart(6, '0')
+
+  app.use('/api/auth', (req, res, next) => {
+    const protectedPaths = new Set(['/login', '/forgot-password', '/reset-password', '/verify-email', '/resend-verification'])
+    if (req.method !== 'POST' || !protectedPaths.has(req.path)) return next()
+    const key = `${req.path}:${req.ip}`
+    const now = Date.now()
+    const entry = sensitiveAttempts.get(key) || { count: 0, until: now + 15 * 60 * 1000 }
+    if (entry.until <= now) { entry.count = 0; entry.until = now + 15 * 60 * 1000 }
+    entry.count += 1
+    sensitiveAttempts.set(key, entry)
+    if (entry.count > 10) return res.status(429).json({ message: 'Too many attempts. Try again in 15 minutes.' })
+    next()
+  })
 
 
   app.use(
@@ -1107,6 +1174,10 @@ export function createApp({
           body.email
         )
 
+      if (body.privacyConsent !== true) {
+        fail('You must accept the Privacy Notice to create an account.')
+      }
+
 
       if (
         await User.exists({
@@ -1122,9 +1193,8 @@ export function createApp({
 
       const userData = {
         name:
-          text(
-            body.name,
-            'Name'
+          nameValue(
+            body.name
           ),
 
         email,
@@ -1135,6 +1205,10 @@ export function createApp({
               body.password
             )
           ),
+
+        emailVerified: false,
+
+        privacyConsentAt: new Date(),
 
         role,
 
@@ -1248,32 +1322,21 @@ export function createApp({
         throw error
       }
 
-
-      if (
-        role ===
-        'staff'
-      ) {
-        return {
-          status: 201,
-
-          data: {
-            pending:
-              true,
-
-            message:
-              'Your staff account request was submitted. You can sign in after an administrator approves it.',
-          },
-        }
-      }
-
+      const code = newOtp()
+      user.emailVerificationCodeHash = digest(code)
+      user.emailVerificationExpiresAt = new Date(Date.now() + emailVerificationLifetimeMs)
+      user.emailVerificationAttempts = 0
+      await user.save()
+      await sendEmailCode(email, code, 'verify')
 
       return {
         status: 201,
-
         data:
-          await createSession(
-            user
-          ),
+          {
+            verificationRequired: true,
+            email,
+            message: 'We sent a verification code to your email. Enter it to activate your account.',
+          },
       }
     }
   )
@@ -1312,6 +1375,10 @@ export function createApp({
         )
       }
 
+      if (!user.emailVerified) {
+        fail('Verify your email address before signing in.', 403)
+      }
+
 
       if (
         user.status ===
@@ -1338,6 +1405,121 @@ export function createApp({
       return createSession(
         user
       )
+    }
+  )
+
+
+  route(
+    'post',
+    '/api/auth/forgot-password',
+    null,
+
+    async ({ body }) => {
+      const email = emailValue(body.email)
+      const user = await User.findOne({ email }).select('+resetPasswordTokenHash +resetPasswordExpiresAt +resetPasswordAttempts')
+      const response = {
+        message: 'If an account exists for that email, a password reset code has been sent.',
+      }
+
+      // The response is intentionally identical for unknown accounts.
+      if (!user) return response
+
+      const code = newOtp()
+      user.resetPasswordTokenHash = digest(code)
+      user.resetPasswordExpiresAt = new Date(Date.now() + passwordResetLifetimeMs)
+      user.resetPasswordAttempts = 0
+      await user.save()
+
+      await sendEmailCode(email, code, 'reset')
+
+      return response
+    }
+  )
+
+
+  route(
+    'post',
+    '/api/auth/reset-password',
+    null,
+
+    async ({ body }) => {
+      const email = emailValue(body.email)
+      const code = text(body.code, 'Reset code', 6)
+      if (!/^\d{6}$/.test(code)) fail('Enter the six-digit reset code.')
+      const user = await User.findOne({ email }).select('+resetPasswordTokenHash +resetPasswordExpiresAt +resetPasswordAttempts')
+
+      if (!user || !user.resetPasswordExpiresAt || user.resetPasswordExpiresAt <= new Date()) {
+        fail('This password reset code is invalid or has expired.', 400)
+      }
+      if ((user.resetPasswordAttempts || 0) >= 5) fail('Too many incorrect codes. Request a new code.', 429)
+      if (!user.resetPasswordTokenHash || !crypto.timingSafeEqual(Buffer.from(user.resetPasswordTokenHash), Buffer.from(digest(code)))) {
+        user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+        await user.save()
+        fail('This password reset code is invalid or has expired.', 400)
+      }
+
+      user.passwordHash = hash(passwordValue(body.password))
+      user.resetPasswordTokenHash = null
+      user.resetPasswordExpiresAt = null
+      user.resetPasswordAttempts = 0
+      await user.save()
+      await Session.deleteMany({ userId: user._id })
+
+      return { message: 'Your password has been reset. You can now sign in.' }
+    }
+  )
+
+
+  route(
+    'post',
+    '/api/auth/verify-email',
+    null,
+
+    async ({ body }) => {
+      const email = emailValue(body.email)
+      const code = text(body.code, 'Verification code', 6)
+      if (!/^\d{6}$/.test(code)) fail('Enter the six-digit verification code.')
+      const user = await User.findOne({ email }).select('+emailVerificationCodeHash +emailVerificationExpiresAt +emailVerificationAttempts')
+
+      if (!user || !user.emailVerificationExpiresAt || user.emailVerificationExpiresAt <= new Date()) {
+        fail('This verification code is invalid or has expired.', 400)
+      }
+      if ((user.emailVerificationAttempts || 0) >= 5) fail('Too many incorrect codes. Request a new code.', 429)
+      if (!user.emailVerificationCodeHash || !crypto.timingSafeEqual(Buffer.from(user.emailVerificationCodeHash), Buffer.from(digest(code)))) {
+        user.emailVerificationAttempts = (user.emailVerificationAttempts || 0) + 1
+        await user.save()
+        fail('This verification code is invalid or has expired.', 400)
+      }
+
+      user.emailVerified = true
+      user.emailVerificationCodeHash = null
+      user.emailVerificationExpiresAt = null
+      user.emailVerificationAttempts = 0
+      await user.save()
+
+      return { message: user.status === 'Pending' ? 'Email verified. Your account is awaiting administrator approval.' : 'Email verified. You can now sign in.' }
+    }
+  )
+
+
+  route(
+    'post',
+    '/api/auth/resend-verification',
+    null,
+
+    async ({ body }) => {
+      const email = emailValue(body.email)
+      const user = await User.findOne({ email }).select('+emailVerificationCodeHash +emailVerificationExpiresAt +emailVerificationAttempts')
+      const response = { message: 'If an unverified account exists for that email, a new code has been sent.' }
+      if (!user || user.emailVerified) return response
+
+      const code = newOtp()
+      user.emailVerificationCodeHash = digest(code)
+      user.emailVerificationExpiresAt = new Date(Date.now() + emailVerificationLifetimeMs)
+      user.emailVerificationAttempts = 0
+      await user.save()
+      await sendEmailCode(email, code, 'verify')
+      return response
     }
   )
 
@@ -1392,9 +1574,8 @@ export function createApp({
         undefined
       ) {
         user.name =
-          text(
-            body.name,
-            'Name'
+          nameValue(
+            body.name
           )
       }
 
@@ -2989,9 +3170,8 @@ export function createApp({
       const user =
         await User.create({
           name:
-            text(
-              body.name,
-              'Name'
+            nameValue(
+              body.name
             ),
 
           email,
