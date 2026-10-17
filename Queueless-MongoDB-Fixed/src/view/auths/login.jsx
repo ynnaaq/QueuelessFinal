@@ -11,7 +11,9 @@ import './login.css'
 
 
 const initialForm = {
-  fullName: '',
+  firstName: '',
+  middleName: '',
+  lastName: '',
   email: '',
   studentId: '',
   course: '',
@@ -201,19 +203,11 @@ const parseStudentName = (fullName) => {
 }
 
 
-const suggestedSchoolEmail = (fullName) => {
-  const parsed =
-    parseStudentName(fullName)
-
-  if (!parsed) {
-    return ''
-  }
-
-  const {
-    firstName,
-    middleName,
-    lastName,
-  } = parsed
+const suggestedSchoolEmail = ({
+  firstName = '',
+  middleName = '',
+  lastName = '',
+}) => {
 
   const firstTwo =
     normalizeNamePart(firstName)
@@ -353,8 +347,14 @@ export default function Login({ onLogin }) {
   // Expected PHINMA email based on entered name
   const expectedEmail =
     suggestedSchoolEmail(
-      account.fullName
+      account
     )
+
+  const studentFullName = [
+    account.firstName,
+    account.middleName,
+    account.lastName,
+  ].filter(Boolean).join(' ')
 
 
   // Check if entered email matches expected email
@@ -517,7 +517,7 @@ export default function Login({ onLogin }) {
         const result =
           await register({
             name:
-              account.fullName,
+              studentFullName,
 
             email:
               account.email,
@@ -1220,31 +1220,20 @@ export default function Login({ onLogin }) {
 
 
               <div className="create-fields">
+                <label>
+                  First name
+                  <input name="firstName" value={account.firstName} onChange={updateAccount} placeholder="First name" pattern={fullNamePattern} required />
+                </label>
+
+                <label>
+                  Middle name
+                  <input name="middleName" value={account.middleName} onChange={updateAccount} placeholder="Middle name" pattern={fullNamePattern} required />
+                </label>
+
                 <label className="wide">
-                  Full name
-
-                  <input
-                    name="fullName"
-                    value={
-                      account.fullName
-                    }
-                    onChange={
-                      updateAccount
-                    }
-                    placeholder="Last Name, First Name, Middle Name"
-                    pattern={
-                      fullNamePattern
-                    }
-                    title="You may enter Last Name, First Name, Middle Name or First Name Middle Name Last Name."
-                    required
-                  />
-
-                  <small className="field-help">
-                    You may use commas,
-                    for example:
-                    Reyes, Jamie,
-                    Cruz
-                  </small>
+                  Last name
+                  <input name="lastName" value={account.lastName} onChange={updateAccount} placeholder="Last name" pattern={fullNamePattern} required />
+                  <small className="field-help">Your school email uses the first two letters of your first and middle names, followed by your last name.</small>
                 </label>
 
 
