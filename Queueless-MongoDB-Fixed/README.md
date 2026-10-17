@@ -85,7 +85,11 @@ Tests use isolated databases and cover authentication, role enforcement, student
 
 ## Password reset email
 
-To deliver real verification and password-reset codes, configure these server environment variables: `SMTP_HOST`, `SMTP_PORT` (usually `587`), `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM`. New accounts cannot sign in until the recipient verifies their email with a six-digit code. Recovery codes expire after 10 minutes, allow at most five incorrect attempts, and resetting a password signs out every existing session. Use an SMTP provider account intended for transactional email; do not expose its credentials in frontend variables.
+The server sends verification and password-reset codes through Resend. Configure these server environment variables on the API host (Render): `RESEND_API_KEY` and `EMAIL_FROM`.
+
+`EMAIL_FROM` must use a sender address from a domain verified in Resend, for example `Queueless <no-reply@your-school-domain.edu>`. Resend testing mode can send only to the Resend account owner's email address; verify a domain before sending to students. Keep `RESEND_API_KEY` server-side only—never expose it as a `VITE_` variable or commit it to `.env`.
+
+New accounts cannot sign in until the recipient verifies their email with a six-digit code. Recovery codes expire after 10 minutes, allow at most five incorrect attempts, and resetting a password signs out every existing session.
 
 ## Security controls
 

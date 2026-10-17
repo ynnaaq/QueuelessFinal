@@ -10,6 +10,7 @@ import Feedback from './models/Feedback.js'
 import Schedule from './models/Schedule.js'
 import { sendEmailOtp } from './emailService.js'
 
+
 const activeStatuses = [
   'waiting',
   'serving',
@@ -99,13 +100,115 @@ const emailValue = (value) => {
 const nameValue = (value) => {
   const name = text(value, 'Full name', 120)
 
-  if (!/^[\p{L}][\p{L}' -]*$/u.test(name)) {
-    fail('Full name can contain letters, spaces, apostrophes, and hyphens only.')
+  // Allows:
+  // letters
+  // spaces
+  // commas
+  // apostrophes
+  // hyphens
+  // periods
+  if (!/^[\p{L}][\p{L}' ,.-]*$/u.test(name)) {
+    fail(
+      'Full name can contain letters, spaces, commas, apostrophes, periods, and hyphens only.'
+    )
   }
 
   return name
 }
 
+const normalizeNamePart = (value = '') =>
+  String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z]/g, '')
+    .toLowerCase()
+
+
+const parseStudentName = (fullName) => {
+  const name = nameValue(fullName)
+
+  if (name.includes(',')) {
+    const parts = name
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+
+    if (parts.length === 3) {
+      return {
+        lastName: parts[0],
+        firstName: parts[1],
+        middleName: parts[2],
+      }
+    }
+
+    if (parts.length === 2) {
+      const rightSide = parts[1]
+        .split(/\s+/)
+        .filter(Boolean)
+
+      if (rightSide.length >= 2) {
+        return {
+          lastName: parts[0],
+          firstName: rightSide[0],
+          middleName: rightSide
+            .slice(1)
+            .join(' '),
+        }
+      }
+    }
+  }
+
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (parts.length >= 3) {
+    return {
+      firstName: parts[0],
+      middleName: parts
+        .slice(1, -1)
+        .join(' '),
+      lastName: parts[parts.length - 1],
+    }
+  }
+
+  fail(
+    'Enter your complete first name, middle name, and last name.'
+  )
+}
+
+
+const expectedPhinmaEmail = (fullName) => {
+  const {
+    firstName,
+    middleName,
+    lastName,
+  } = parseStudentName(fullName)
+
+  const firstTwo =
+    normalizeNamePart(firstName)
+      .slice(0, 2)
+
+  const middleTwo =
+    normalizeNamePart(middleName)
+      .slice(0, 2)
+
+  const last =
+    normalizeNamePart(lastName)
+
+  if (
+    firstTwo.length < 2 ||
+    middleTwo.length < 2 ||
+    !last
+  ) {
+    fail(
+      'Unable to determine the PHINMA email from the entered name.'
+    )
+  }
+
+  return `${firstTwo}${middleTwo}.${last}.up@phinmaed.com`
+}
 
 const scheduleValue = (value) => {
   if (
@@ -1170,9 +1273,28 @@ export function createApp({
 
 
       const email =
-        emailValue(
-          body.email
-        )
+  emailValue(
+    body.email
+  )
+
+if (role === 'student') {
+  const expectedEmail =
+    expectedPhinmaEmail(
+      body.name
+    )
+
+  if (email !== expectedEmail) {
+    fail(
+      `The name and PHINMA email do not match. Based on the name entered, the expected email is ${expectedEmail}`
+    )
+  }
+}
+
+if (body.privacyConsent !== true) {
+  fail(
+    'You must accept the Privacy Notice to create an account.'
+  )
+}
 
       if (body.privacyConsent !== true) {
         fail('You must accept the Privacy Notice to create an account.')
