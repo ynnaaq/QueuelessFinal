@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  login,
-  register,
-  resendVerification,
-  verifyEmail,
-} from '../../services/auth.js'
+  signUpWithSupabase,
+  verifySupabaseOtp,
+  resendSupabaseOtp,
+  signInWithSupabase,
+  sendPasswordReset,
+  verifyPasswordRecoveryOtp,
+  updateSupabasePassword,
+} from '../../services/supabaseAuth.js'
 import { supabase } from '../../lib/supabase.js'
-import { sendPasswordReset, updateSupabasePassword } from '../../services/supabaseAuth.js'
 import './login.css'
 
 
@@ -73,6 +75,17 @@ const courses = [
 
   'Associate in Computer Technology',
 ]
+
+const seniorHighStrands = [
+  'ABM (Accountancy, Business and Management)',
+  'HUMSS (Humanities and Social Sciences)',
+  'STEM (Science, Technology, Engineering and Mathematics)',
+  'GAS (General Academic Strand)',
+  'TVL (Technical-Vocational-Livelihood)',
+]
+
+const isSeniorHigh = (yearLevel) =>
+  yearLevel === 'Grade 11' || yearLevel === 'Grade 12'
 
 
 // ======================================================
@@ -381,19 +394,24 @@ export default function Login({ onLogin }) {
     )
 
 
-  const updateAccount = ({
-    target,
-  }) =>
+  const updateAccount = ({ target }) =>
     setAccount(
-      (current) => ({
-        ...current,
+      (current) => {
+        const value = target.type === 'checkbox' ? target.checked : target.value
 
-        [target.name]:
-          target.type ===
-          'checkbox'
-            ? target.checked
-            : target.value,
-      })
+        // A strand cannot be used as a college course (and vice versa).
+        // Grade 11 and Grade 12 share the same strand choices, so retain a
+        // selection when moving between those two levels.
+        if (target.name === 'yearLevel') {
+          const course = isSeniorHigh(current.yearLevel) !== isSeniorHigh(value)
+            ? ''
+            : current.course
+
+          return { ...current, yearLevel: value, course }
+        }
+
+        return { ...current, [target.name]: value }
+      }
     )
 
   const useSuggestedEmail = () =>
@@ -420,174 +438,106 @@ export default function Login({ onLogin }) {
   // LOGIN
   // ======================================================
 
-  const authenticate =
-    async (event) => {
-      event.preventDefault()
+  const authenticate = async (event) => {
+    event.preventDefault()
+    if (signingIn) return
 
-      if (signingIn) {
-        return
+    setSigningIn(true)
+    setMessage('')
+
+    try {
+      const result = await signInWithSupabase(
+        credentials.email,
+        credentials.password
+      )
+
+      if (!result.session) {
+        throw new Error('Sign in failed: no session was returned.')
       }
 
-      setSigningIn(true)
-
-      try {
-        const session =
-          await login(
-            credentials.email,
-            credentials.password
-          )
-
-        setMessage('')
-
-        onLogin?.(
-          session,
-          remember
-        )
-      } catch (error) {
-        if (
-          error.message ===
-          'Verify your email address before signing in.'
-        ) {
-          setReset(
-            (current) => ({
-              ...current,
-
-              email:
-                credentials.email,
-
-              code: '',
-            })
-          )
-
-          setMessage(
-            error.message
-          )
-
-          setPage('verify')
-        } else {
-          setMessage(
-            error.message
-          )
-        }
-      } finally {
-        setSigningIn(false)
+      // The parent app may still expect an Express session shape.
+      // Its onLogin/session management must also be migrated to Supabase.
+      onLogin?.(result, remember)
+    } catch (error) {
+      const errorMessage = error?.message || 'Could not sign in.'
+      if (/email not confirmed|email not verified/i.test(errorMessage)) {
+        setReset((current) => ({
+          ...current,
+          email: credentials.email.trim().toLowerCase(),
+          code: '',
+        }))
+        setPage('verify')
       }
+      setMessage(errorMessage)
+    } finally {
+      setSigningIn(false)
     }
+  }
 
 
+  // ======================================================
   // ======================================================
   // CREATE ACCOUNT
   // ======================================================
 
-  const createAccount =
-    async (event) => {
-      event.preventDefault()
+  const createAccount = async (event) => {
+    event.preventDefault()
+    setMessage('')
 
-      if (
-        account.password !==
-        account.confirmPassword
-      ) {
-        setMessage(
-          'Passwords do not match.'
-        )
-
-        return
-      }
-
-
-      if (!expectedEmail) {
-        setMessage(
-          'Enter your complete first name, middle name, and last name.'
-        )
-
-        return
-      }
-
-
-      if (emailMismatch) {
-        setMessage(
-          `The name and PHINMA email do not match. Expected email: ${expectedEmail}`
-        )
-
-        return
-      }
-
-
-      try {
-        const result =
-          await register({
-            name:
-              studentFullName,
-
-            email:
-              account.email,
-
-            password:
-              account.password,
-
-            accountId:
-              account.studentId,
-
-            role:
-              'student',
-
-            department:
-              account.course,
-
-            yearLevel:
-              account.yearLevel,
-
-            semester:
-              account.semester,
-
-            privacyConsent:
-              account.privacyConsent,
-          })
-
-
-        setReset(
-          (current) => ({
-            ...current,
-
-            email:
-              result.email ||
-              account.email,
-
-            code: '',
-          })
-        )
-
-        setMessage(
-          result.message
-        )
-
-        setPage('verify')
-      } catch (error) {
-        if (
-          error.message ===
-          'We could not send the code. Please try again later.'
-        ) {
-          setReset(
-            (current) => ({
-              ...current,
-
-              email:
-                account.email,
-
-              code: '',
-            })
-          )
-
-          setPage('verify')
-        }
-
-        setMessage(
-          error.message
-        )
-      }
+    if (account.password !== account.confirmPassword) {
+      setMessage('Passwords do not match.')
+      return
+    }
+    if (!expectedEmail) {
+      setMessage('Enter your complete first name, middle name, and last name.')
+      return
+    }
+    if (emailMismatch) {
+      setMessage(`The name and PHINMA email do not match. Expected email: ${expectedEmail}`)
+      return
+    }
+    if (!account.privacyConsent) {
+      setMessage('Please agree to the Privacy Notice.')
+      return
     }
 
+    try {
+      const result = await signUpWithSupabase(
+        account.email,
+        account.password,
+        {
+          firstName: account.firstName,
+          middleName: account.middleName,
+          lastName: account.lastName,
+          studentId: account.studentId,
+          course: account.course,
+          yearLevel: account.yearLevel,
+          semester: account.semester,
+        }
+      )
 
+      if (!result.user) {
+        throw new Error('Supabase did not return a user. Please try again.')
+      }
+
+      const email = account.email.trim().toLowerCase()
+      setReset((current) => ({ ...current, email, code: '' }))
+
+      if (result.session) {
+        setPage('signin')
+        setMessage('Account created. Please sign in.')
+      } else {
+        setPage('verify')
+        setMessage('Check your school email for the verification code.')
+      }
+    } catch (error) {
+      console.error('Supabase registration error:', error)
+      setMessage(error?.message || 'Registration failed. Please try again.')
+    }
+  }
+
+
+  // ======================================================
   // ======================================================
   // SUPABASE PASSWORD RECOVERY
   // ======================================================
@@ -601,13 +551,26 @@ export default function Login({ onLogin }) {
 
     try {
       const result = await sendPasswordReset(reset.email)
+      setReset((current) => ({ ...current, code: '', password: '', confirmPassword: '' }))
+      setPage('recovery-code')
       setMessage(result.message)
-      // Stay on Forgot Password. Supabase sends a recovery LINK,
-      // not the legacy Express six-digit reset code.
     } catch (error) {
       setMessage(error.message)
     } finally {
       setSendingReset(false)
+    }
+  }
+
+  const verifyPasswordResetCode = async (event) => {
+    event.preventDefault()
+    setMessage('')
+
+    try {
+      await verifyPasswordRecoveryOtp(reset.email, reset.code)
+      setPage('reset')
+      setMessage('Code verified. Choose a new password.')
+    } catch (error) {
+      setMessage(error.message)
     }
   }
 
@@ -624,10 +587,9 @@ export default function Login({ onLogin }) {
     setMessage('')
 
     try {
-      // The user must have opened a valid Supabase recovery link.
       const { data, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !data.session) {
-        throw new Error('Recovery session expired. Request a new reset link.')
+        throw new Error('Recovery session expired. Request a new reset code.')
       }
 
       await updateSupabasePassword(reset.password)
@@ -653,47 +615,31 @@ export default function Login({ onLogin }) {
   // EMAIL VERIFICATION
   // ======================================================
 
-  const confirmEmail =
-    async (event) => {
-      event.preventDefault()
-
-      try {
-        const result =
-          await verifyEmail(
-            reset.email,
-            reset.code
-          )
-
-        setMessage(
-          result.message
-        )
-
-        setPage('signin')
-      } catch (error) {
-        setMessage(
-          error.message
-        )
-      }
+  const confirmEmail = async (event) => {
+    event.preventDefault()
+    setMessage('')
+    try {
+      await verifySupabaseOtp(reset.email, reset.code)
+      // Prevent a lingering signup session from skipping the login screen.
+      await supabase.auth.signOut()
+      setPage('signin')
+      setMessage('Email verified successfully. Please sign in.')
+    } catch (error) {
+      console.error('Supabase verification error:', error)
+      setMessage(error?.message || 'Verification failed.')
     }
+  }
 
-
-  const resendCode =
-    async () => {
-      try {
-        const result =
-          await resendVerification(
-            reset.email
-          )
-
-        setMessage(
-          result.message
-        )
-      } catch (error) {
-        setMessage(
-          error.message
-        )
-      }
+  const resendCode = async () => {
+    setMessage('')
+    try {
+      await resendSupabaseOtp(reset.email)
+      setMessage('If eligible, a new verification email has been sent.')
+    } catch (error) {
+      console.error('Supabase resend error:', error)
+      setMessage(error?.message || 'Could not resend verification code.')
     }
+  }
 
 
   return (
@@ -981,7 +927,7 @@ export default function Login({ onLogin }) {
 
                 <p>
                   Enter your email and
-                  we’ll send a reset link
+                  we’ll send a six-digit reset code
                   if an account matches it.
                 </p>
               </div>
@@ -1007,7 +953,7 @@ export default function Login({ onLogin }) {
                 type="submit"
                 disabled={sendingReset}
               >
-                {sendingReset ? 'Sending recovery email...' : 'Send reset link'}
+                {sendingReset ? 'Sending recovery email...' : 'Send reset code'}
                 <span>→</span>
               </button>
 
@@ -1033,6 +979,21 @@ export default function Login({ onLogin }) {
                   Back to sign in
                 </button>
               </p>
+            </form>
+          ) : page === 'recovery-code' ? (
+            <form className="auth-card reset-card" onSubmit={verifyPasswordResetCode}>
+              <div className="card-heading">
+                <span>PASSWORD RECOVERY</span>
+                <h2>Enter your reset code</h2>
+                <p>We sent a six-digit code to <b>{reset.email}</b>. Enter it to choose a new password.</p>
+              </div>
+              <label>
+                Reset code
+                <input name="code" value={reset.code} onChange={updateReset} placeholder="123456" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength="6" required />
+              </label>
+              <button className="primary-button" type="submit">Verify code <span>→</span></button>
+              {message && <p className="signin-message reset-message" role="status">{message}</p>}
+              <p className="account-switch">Didn't receive it? <button type="button" onClick={requestReset}>Send another code</button></p>
             </form>
           ) : page === 'verify' ? (
             <form
@@ -1331,39 +1292,6 @@ export default function Login({ onLogin }) {
 
 
                 <label>
-                  Course
-
-                  <select
-                    name="course"
-                    value={
-                      account.course
-                    }
-                    onChange={
-                      updateAccount
-                    }
-                    required
-                  >
-                    <option
-                      value=""
-                      disabled
-                    >
-                      Select course
-                    </option>
-
-                    {courses.map(
-                      (course) => (
-                        <option
-                          key={course}
-                        >
-                          {course}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </label>
-
-
-                <label>
                   Year level
 
                   <select
@@ -1406,6 +1334,39 @@ export default function Login({ onLogin }) {
                     <option>
                       Fourth year
                     </option>
+                  </select>
+                </label>
+
+
+                <label>
+                  {isSeniorHigh(account.yearLevel) ? 'Strand' : 'Course'}
+
+                  <select
+                    name="course"
+                    value={
+                      account.course
+                    }
+                    onChange={
+                      updateAccount
+                    }
+                    required
+                  >
+                    <option
+                      value=""
+                      disabled
+                    >
+                      {isSeniorHigh(account.yearLevel) ? 'Select strand' : 'Select course'}
+                    </option>
+
+                    {(isSeniorHigh(account.yearLevel) ? seniorHighStrands : courses).map(
+                      (course) => (
+                        <option
+                          key={course}
+                        >
+                          {course}
+                        </option>
+                      )
+                    )}
                   </select>
                 </label>
 

@@ -1,204 +1,206 @@
-import { useEffect, useState } from 'react'
+
+import { useEffect, useRef, useState } from 'react'
 import AppRoutes from './view/routes/routes.jsx'
-import {
-  clearStoredSession,
-  getCurrentUser,
-  getStoredSession,
-  signOut,
-  storeSession,
-} from './services/auth.js'
+import { supabase } from './lib/supabase.js'
 import './App.css'
 
-const TAB_ID_KEY = 'queueless-tab-id'
-const TAB_CHANNEL = 'queueless-session-tabs'
+// ======================================================
+// GET USER ROLE FROM SUPABASE
+// ======================================================
 
-const newId = () =>
-  globalThis.crypto?.randomUUID?.() ??
-  `${Date.now()}-${Math.random()}`
+async function getUserRole(userId) {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle()
 
-// Used only to compare sessions across tabs without broadcasting a bearer
-// token through BroadcastChannel.
-const sessionFingerprint = (token) => {
-  let hash = 2166136261
-
-  for (const character of token) {
-    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619)
+  if (error) {
+    throw new Error(
+      `Failed to load user role: ${error.message}`
+    )
   }
 
-  return (hash >>> 0).toString(36)
+  if (!data?.role) {
+    throw new Error(
+      'No Queueless role is assigned to this account.'
+    )
+  }
+
+  return data.role
 }
 
-const getTabId = () => {
-  try {
-    const existing = sessionStorage.getItem(TAB_ID_KEY)
+// ======================================================
+// CONVERT SUPABASE SESSION FOR QUEUELESS
+// ======================================================
 
-    if (existing) return existing
+async function formatSession(authSession) {
+  if (!authSession?.user || !authSession?.access_token) {
+    return null
+  }
 
-    const tabId = newId()
-    sessionStorage.setItem(TAB_ID_KEY, tabId)
-    return tabId
-  } catch {
-    return newId()
+  const role = await getUserRole(authSession.user.id)
+
+  return {
+    token: authSession.access_token,
+    access_token: authSession.access_token,
+    refresh_token: authSession.refresh_token,
+    expires_at: authSession.expires_at,
+
+    user: {
+      id: authSession.user.id,
+      email: authSession.user.email,
+      name:
+        authSession.user.user_metadata?.full_name ||
+        authSession.user.email,
+      role,
+      emailVerified:
+        Boolean(authSession.user.email_confirmed_at),
+    },
   }
 }
 
-const replaceTabId = () => {
-  try {
-    sessionStorage.setItem(TAB_ID_KEY, newId())
-  } catch {
-    // The session is already unavailable when browser storage is blocked.
-  }
-}
+// ======================================================
+// MAIN QUEUELESS APP
+// ======================================================
 
 export default function App() {
-  const [session, setSession] = useState(() => getStoredSession())
-  const [checkingSession, setCheckingSession] = useState(
-    () => Boolean(getStoredSession()?.token)
-  )
-  const [tabRevision, setTabRevision] = useState(0)
+  const [session, setSession] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
+  const revisionRef = useRef(0)
 
-  // A duplicated browser tab receives a copy of sessionStorage, including the
-  // authentication token. Detect that case before restoring the token so the
-  // duplicate can sign in independently without sharing a server session.
+  // ====================================================
+  // RESTORE SUPABASE SESSION
+  // ====================================================
+
   useEffect(() => {
-    const savedSession = getStoredSession()
+    let active = true
 
-    if (!savedSession?.token) {
-      setSession(null)
-      setCheckingSession(false)
-      return
-    }
-
-    let cancelled = false
-    let duplicate = false
-    let verifyTimer
-    const tabId = getTabId()
-    const instanceId = newId()
-    const fingerprint = sessionFingerprint(savedSession.token)
-    const channel =
-      typeof BroadcastChannel === 'undefined'
-        ? null
-        : new BroadcastChannel(TAB_CHANNEL)
-
-    const restoreSession = () => {
-      if (cancelled || duplicate) return
+    const loadSession = async (authSession) => {
+      const revision = ++revisionRef.current
 
       setCheckingSession(true)
 
-      getCurrentUser(savedSession.token)
-        .then(({ user }) => {
-          if (cancelled || duplicate) return
+      try {
+        const nextSession = await formatSession(authSession)
 
-          // Make sure this tab did not replace the token while the request
-          // was running.
-          const latestSession = getStoredSession()
-
-          if (
-            !latestSession?.token ||
-            latestSession.token !== savedSession.token
-          ) {
-            return
-          }
-
-          setSession({
-            ...latestSession,
-            user,
-          })
-        })
-        .catch(() => {
-          if (cancelled || duplicate) return
-
-          const latestSession = getStoredSession()
-
-          // Only remove the token that actually failed.
-          if (latestSession?.token === savedSession.token) {
-            clearStoredSession()
-            setSession(null)
-          }
-        })
-        .finally(() => {
-          if (!cancelled && !duplicate) {
-            setCheckingSession(false)
-          }
-        })
-    }
-
-    if (!channel) {
-      restoreSession()
-    } else {
-      channel.onmessage = ({ data }) => {
-        if (data?.tabId !== tabId) return
-
-        if (
-          data.type === 'session-tab-check' &&
-          data.instanceId !== instanceId &&
-          data.fingerprint === fingerprint
-        ) {
-          channel.postMessage({
-            type: 'session-tab-present',
-            tabId,
-            fingerprint,
-            targetInstanceId: data.instanceId,
-          })
+        if (!active || revision !== revisionRef.current) {
+          return
         }
 
-        if (
-          data.type === 'session-tab-present' &&
-          data.targetInstanceId === instanceId &&
-          data.fingerprint === fingerprint
-        ) {
-          duplicate = true
-          clearTimeout(verifyTimer)
-          clearStoredSession()
-          replaceTabId()
-          setSession(null)
+        setSession(nextSession)
+      } catch (error) {
+        if (!active || revision !== revisionRef.current) {
+          return
+        }
+
+        console.error('Queueless session error:', error)
+        setSession(null)
+      } finally {
+        if (active && revision === revisionRef.current) {
           setCheckingSession(false)
-          setTabRevision((revision) => revision + 1)
         }
       }
-
-      channel.postMessage({
-        type: 'session-tab-check',
-        tabId,
-        fingerprint,
-        instanceId,
-      })
-
-      verifyTimer = window.setTimeout(restoreSession, 150)
     }
+
+    // Listen for login, logout and token refresh.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, authSession) => {
+        // Perform role queries outside the auth callback.
+        setTimeout(() => {
+          if (active) {
+            void loadSession(authSession)
+          }
+        }, 0)
+      }
+    )
+
+    const restoreSession = async () => {
+      const { data, error } = await supabase.auth.getSession()
+
+      if (!active) return
+
+      if (error) {
+        console.error('Supabase session error:', error)
+        setCheckingSession(false)
+        return
+      }
+
+      await loadSession(data.session)
+    }
+
+    void restoreSession()
 
     return () => {
-      cancelled = true
-      clearTimeout(verifyTimer)
-      channel?.close()
+      active = false
+      revisionRef.current += 1
+      subscription.unsubscribe()
     }
-  }, [tabRevision])
+  }, [])
 
-  const onLogin = (nextSession) => {
-    storeSession(nextSession)
-    setSession(nextSession)
-    setCheckingSession(false)
-    setTabRevision((revision) => revision + 1)
-  }
+  // ====================================================
+  // LOGIN
+  // ====================================================
 
-  const onLogout = async () => {
-    const currentToken = session?.token
+  const onLogin = async (result) => {
+    const authSession =
+      result?.session?.access_token
+        ? result.session
+        : result?.access_token
+          ? result
+          : null
 
-    // Clear browser state immediately.
-    clearStoredSession()
-    setSession(null)
-    setCheckingSession(false)
-    setTabRevision((revision) => revision + 1)
+    if (!authSession) {
+      console.error(
+        'Supabase login did not return a valid session.'
+      )
+      return
+    }
 
-    if (currentToken) {
-      try {
-        await signOut(currentToken)
-      } catch {
-        // User is already logged out locally,
-        // so a server/network error should not block logout.
+    const revision = ++revisionRef.current
+    setCheckingSession(true)
+
+    try {
+      const nextSession = await formatSession(authSession)
+
+      if (revision !== revisionRef.current) return
+
+      setSession(nextSession)
+    } catch (error) {
+      if (revision !== revisionRef.current) return
+
+      console.error('Queueless login error:', error)
+      setSession(null)
+    } finally {
+      if (revision === revisionRef.current) {
+        setCheckingSession(false)
       }
     }
   }
+
+  // ====================================================
+  // LOGOUT
+  // ====================================================
+
+  const onLogout = async () => {
+    revisionRef.current += 1
+
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      console.error('Supabase logout error:', error)
+      throw error
+    }
+
+    setSession(null)
+    setCheckingSession(false)
+  }
+
+  // ====================================================
+  // RENDER APPLICATION ROUTES
+  // ====================================================
 
   return (
     <AppRoutes

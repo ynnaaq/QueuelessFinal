@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
+import { createClient } from '@supabase/supabase-js'
 import User from './models/User.js'
 import Office from './models/Office.js'
 import Ticket from './models/Ticket.js'
@@ -947,6 +948,18 @@ export function createApp({
   const app =
     express()
 
+  // The frontend signs users in through Supabase. Verify those bearer tokens
+  // with Supabase before mapping them to the matching local application user.
+  // Keeping this optional preserves the original MongoDB-session flow for
+  // installations that have not configured Supabase.
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  const supabase = supabaseUrl && supabaseKey
+    ? createClient(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    : null
+
 
   app.set('trust proxy', 1)
 
@@ -1161,6 +1174,20 @@ export function createApp({
                       'Active',
                   }
                 )
+            }
+
+            // Supabase access tokens are JWTs, not records in the local
+            // Session collection. Ask Supabase to validate the token, then
+            // use the verified email to find the corresponding app account.
+            if (!user && supabase) {
+              const { data, error } = await supabase.auth.getUser(token)
+
+              if (!error && data.user?.email) {
+                user = await User.findOne({
+                  email: data.user.email.toLowerCase(),
+                  status: 'Active',
+                })
+              }
             }
           }
 
