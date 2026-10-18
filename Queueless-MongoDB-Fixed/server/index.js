@@ -1,8 +1,12 @@
-
 import 'dotenv/config'
 import mongoose from 'mongoose'
 import { connectDB } from './db.js'
 import { createApp } from './app.js'
+import dotenv from 'dotenv'
+
+dotenv.config({
+  path: 'server/.env'
+})
 
 // Connect to MongoDB Atlas
 await connectDB()

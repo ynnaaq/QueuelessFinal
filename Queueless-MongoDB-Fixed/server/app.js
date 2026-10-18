@@ -1218,7 +1218,73 @@ export function createApp({
                 // are stored in MongoDB. Provision the matching local account
                 // on the first verified request so their Supabase session can
                 // use the protected student endpoints.
-                if (!user && data.user.user_metadata?.role === 'student') {
+                
+if (
+  !user &&
+  data.user.email_confirmed_at &&
+  data.user.user_metadata?.role === 'student'
+) {
+  const metadata = data.user.user_metadata || {}
+  const email = data.user.email.trim().toLowerCase()
+  const accountId = String(metadata.student_id || '').trim()
+
+  // Do not reuse another student's school ID.
+  const accountOwner = accountId
+    ? await User.findOne({ accountId }).select('email')
+    : null
+
+  if (accountOwner && accountOwner.email !== email) {
+    fail('This student ID is already registered.', 409)
+  }
+
+  // Find an existing student or insert a new record.
+  try {
+    user = await User.findOneAndUpdate(
+      { email },
+      {
+        $setOnInsert: {
+          name: String(
+            metadata.full_name || email
+          ).trim(),
+          email,
+          passwordHash: hash(
+            crypto.randomBytes(32).toString('base64url')
+          ),
+          role: 'student',
+          status: 'Active',
+          accountId,
+          department: String(metadata.course || '').trim(),
+          yearLevel: String(metadata.year_level || '').trim(),
+          semester: String(metadata.semester || '').trim(),
+          emailVerified: true
+        }
+      },
+      {
+        upsert: true,
+        new: true,
+        runValidators: true,
+        setDefaultsOnInsert: true
+      }
+    )
+  } catch (error) {
+    if (error.code === 11000) {
+      // Handle a simultaneous request creating the same email.
+      user = await User.findOne({ email })
+      if (!user) {
+        fail('Email or student ID is already registered.', 409)
+      }
+    } else {
+      throw error
+    }
+  }
+
+  // Never turn an existing admin, staff, or inactive
+  // account into an active student.
+  if (user?.role !== 'student' || user?.status !== 'Active') {
+    fail('This account cannot access the student portal.', 403)
+  }
+}
+{
                   const metadata = data.user.user_metadata || {}
                   const accountId = String(metadata.student_id || '').trim()
                   const existingAccountId = accountId
