@@ -17,22 +17,12 @@ const definitions = [
   ['reg', 'Registrar', 'R', 4, ['Transcript / school records', 'Certificate request', 'Enrollment concern']],
   ['fin', 'Finance', 'F', 6, ['Tuition / school fees', 'Official receipt request', 'Account assessment']],
   ['csdl', 'CSDL', 'C', 5, ['Student clearance', 'ID concern', 'General student concern']],
+  ['lib', 'Library', 'L', 3, ['Library clearance', 'Borrowing / return concern', 'Account verification']],
+  ['mkt', 'Marketing', 'M', 4, ['Marketing inquiry', 'Sponsorship / partnership request', 'Branding material request']],
+  ['book', 'Bookstore', 'B', 3, ['Textbook purchase inquiry', 'School supplies purchase', 'Bookstore order concern']],
 ]
 
 await connectDB()
-
-const library = await Office.findOne({ $or: [{ slug: 'lib' }, { name: 'Library' }] })
-if (library) {
-  const libraryStaff = await User.find({ role: 'staff', office: 'Library' }).select('_id')
-  await Feedback.deleteMany({ officeId: library._id })
-  await Ticket.deleteMany({ officeId: library._id })
-  if (libraryStaff.length) {
-    const staffIds = libraryStaff.map((member) => member._id)
-    await Session.deleteMany({ userId: { $in: staffIds } })
-    await User.deleteMany({ _id: { $in: staffIds } })
-  }
-  await Office.deleteOne({ _id: library._id })
-}
 
 for (const [slug, name, code, wait, services] of definitions) {
   await Office.updateOne(

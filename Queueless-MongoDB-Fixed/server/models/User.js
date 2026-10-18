@@ -114,6 +114,11 @@ const userSchema = new mongoose.Schema(
       trim: true
     },
 
+    avatar: {
+      type: String,
+      default: ''
+    },
+
     office: {
       type: String,
       default: '',

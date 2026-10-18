@@ -251,7 +251,7 @@ function QueueMark() {
   return (
     <img
       className="queue-logo"
-      src="/queue-logo.png"
+      src="/campus-queue-logo.png"
       alt=""
     />
   )

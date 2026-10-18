@@ -7,7 +7,50 @@ const services = [
   { office: 'Registrar', icon: '📋', color: '#7357d8', description: 'Academic records, enrollment and certifications', wait: 4, options: ['Transcript / school records', 'Certificate request', 'Enrollment concern'], requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
   { office: 'Finance', icon: '💳', color: '#1677c8', description: 'Payments, balances, receipts and assessments', wait: 6, options: ['Tuition / school fees', 'Official receipt request', 'Account assessment'], requirements: ['Valid school ID', 'Payment or reference document', 'Assessment form when applicable'] },
   { office: 'CSDL', icon: '🪪', color: '#d45575', description: 'Student services, IDs, clearances and concerns', wait: 5, options: ['Student clearance', 'ID concern', 'General student concern'], requirements: ['Valid school ID', 'Relevant clearance or concern form'] },
+  { office: 'Marketing', icon: '📣', color: '#e06c47', description: 'Marketing support, partnerships, and branding requests', wait: 4, options: ['Marketing inquiry', 'Sponsorship / partnership request', 'Branding material request'], requirements: ['Valid school ID', 'Relevant request details'] },
+  { office: 'Bookstore', icon: '📚', color: '#278a73', description: 'Textbooks, school supplies, and bookstore order support', wait: 3, options: ['Textbook purchase inquiry', 'School supplies purchase', 'Bookstore order concern'], requirements: ['Valid school ID', 'Order or receipt details'] },
 ]
+
+// Keep the profile choices consistent with student registration. The API still
+// calls this value `department`, so it is translated when the profile is saved.
+const courses = [
+  'AB English Language',
+  'Bachelor of Arts in Communication',
+  'Bachelor of Arts in Political Science',
+  'Bachelor of Elementary Education',
+  'Bachelor of Secondary Education – English',
+  'Bachelor of Secondary Education – Science',
+  'Bachelor of Secondary Education – Social Studies',
+  'BS Accountancy',
+  'BS Accounting Information System (AcctgTech)',
+  'BS Architecture',
+  'BS Business Administration – Financial Management',
+  'BS Business Administration – Marketing Management',
+  'BS Civil Engineering',
+  'BS Computer Engineering',
+  'BS Criminology',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Entrepreneurship',
+  'BS Hospitality Management',
+  'BS Information Technology',
+  'BS Management Accounting',
+  'BS Mechanical Engineering',
+  'BS Medical Laboratory Science',
+  'BS Nursing',
+  'BS Pharmacy',
+  'BS Tourism Management',
+  'Associate in Computer Technology',
+]
+
+const seniorHighStrands = [
+  'ABM (Accountancy, Business and Management)',
+  'HUMSS (Humanities and Social Sciences)',
+  'STEM (Science, Technology, Engineering and Mathematics)',
+  'GAS (General Academic Strand)',
+]
+
+const isSeniorHigh = (yearLevel = '') => /^Grade (11|12)$/.test(yearLevel)
 
 const initials = (name = '') => name.split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'S'
 const validSchoolId = (id) => /^03-\d{4}-\d{5,6}$/.test(id || '')
@@ -22,11 +65,12 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
   const queueMutation = useRef(0)
   const cancelPending = useRef(false)
   const activeTicketId = useRef(null)
+  const nearQueueNoticeTicket = useRef(null)
   const [history, setHistory] = useState([])
   const [selectedService, setSelectedService] = useState(null)
   const [notice, setNotice] = useState('')
   const [choices, setChoices] = useState(() => Object.fromEntries(services.map((service) => [service.office, service.options[0]])))
-  const [profile, setProfile] = useState(() => ({ name: user?.name || 'Student', email: user?.email || '', id: validSchoolId(user?.accountId) ? user.accountId : '03-0000-000000', department: user?.department || 'CITE', yearLevel: user?.yearLevel || 'First year', semester: user?.semester || '1st semester' }))
+  const [profile, setProfile] = useState(() => ({ name: user?.name || 'Student', email: user?.email || '', id: validSchoolId(user?.accountId) ? user.accountId : '', course: user?.course || user?.department || '', yearLevel: user?.yearLevel || 'First year', semester: user?.semester || '1st semester', avatar: user?.avatar || '' }))
   const [returningUser] = useState(() => {
     const key = `queueless-welcomed-${user?.id || user?.email || 'student'}`
     const seen = localStorage.getItem(key) === 'true'
@@ -42,6 +86,10 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       services: Array.isArray(office.services) ? office.services : [],
     }))
     setOfficeState(normalizedOffices)
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries(normalizedOffices.map((office) => [office.name, current[office.name] || office.services[0]?.name || ''])),
+    }))
     const convert = (ticket) => {
       const office = normalizedOffices.find(o=>o.id===ticket.officeId || o.name===ticket.officeId)
       const base = services.find(s=>s.office===office?.name)
@@ -67,6 +115,15 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
     setQueue(nextQueue)
     setHistory(nextHistory)
 
+    // Show the approaching-turn alert only once per ticket, rather than on
+    // every automatic queue refresh.
+    if (nextQueue && nextQueue.status !== 'Now serving' && nextQueue.ahead <= 2 && nearQueueNoticeTicket.current !== nextQueue.id) {
+      nearQueueNoticeTicket.current = nextQueue.id
+      setNotice(`You’re almost at the front of the line for ${nextQueue.office}: ${nextQueue.ahead} student${nextQueue.ahead === 1 ? '' : 's'} ahead.`)
+    } else if (!nextQueue) {
+      nearQueueNoticeTicket.current = null
+    }
+
     if (completedTicket) {
       setNotice(
         `Your ${completedTicket.ticket} ticket has been marked served. You can now rate the service in Review.`
@@ -88,12 +145,15 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
     const timer=setInterval(poll,2000)
     return ()=>{disposed=true;clearInterval(timer)}
   }, [token, applyState])
-  const availableServices=services.map(service=>{
-    const office=officeState.find(o=>o.name===service.office)
-    return {...service,open:office?.open ?? false,requirements:office?.services?.find(s=>s.name===choices[service.office])?.requirements || service.requirements}
+  const availableServices=officeState.map((office)=>{
+    const known=services.find((service)=>service.office===office.name)
+    const options=office.services.map((service)=>service.name)
+    const selected=choices[office.name] || options[0] || ''
+    return { office:office.name, icon:known?.icon || '🏢', color:known?.color || '#526bd9', description:known?.description || `Services and assistance from the ${office.name} office`, wait:office.wait, options, open:office.open, requirements:office.services.find((service)=>service.name===selected)?.requirements || ['Valid school ID'] }
   })
   const saveProfile=async(next)=>{
-    try {const {user:updated}=await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify(next)});setProfile({...updated,id:updated.accountId});setNotice('Profile saved.');return true}
+    const { course, ...profileDetails } = next
+    try {const {user:updated}=await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify({...profileDetails,department:course})});setProfile({...updated,id:updated.accountId,course:updated.course || updated.department || ''});setNotice('Profile saved.');return true}
     catch(error){setNotice(error.message);return false}
   }
 
@@ -150,17 +210,19 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
     ['services', 'Services'],
     ['calendar', 'Calendar'],
     ['queues', 'My Queue'],
+    ['monitor', 'Live Monitor'],
     ['history', 'History'],
     ['star', 'Review'],
     ['profile', 'Profile'],
   ]
+  const navSections = [['Workspace',['Dashboard','Services','Calendar','My Queue','Live Monitor']],['Activity',['History','Review']],['Account',['Profile']]]
 
   return (
     <main className="student-app">
       <aside className="student-sidebar">
-        <div className="student-logo"><img className="student-mark" src="/queue-logo.png" alt="" /><span>Queueless<small>Student portal</small></span></div>
-        <nav>{nav.map(([icon, label]) => <button type="button" title={label} aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => go(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'My Queue' && queue && <em>1</em>}</button>)}</nav>
-        <div className="account"><span>{initials(profile.name)}</span><p><b>{profile.name}</b><small>{profile.id}</small></p><button onClick={onLogout} title="Sign out">⇥</button></div>
+        <div className="student-logo"><img className="student-mark" src="/campus-queue-logo.png" alt="" /><span>Queueless<small>Student portal</small></span></div>
+        <nav>{navSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{nav.filter(([,label]) => labels.includes(label)).map(([icon, label]) => <button type="button" title={label} aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => go(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'My Queue' && queue && <em>1</em>}</button>)}</div>)}</nav>
+        <div className="account"><span className="account-avatar">{profile.avatar ? <img src={profile.avatar} alt="" /> : initials(profile.name)}</span><p><b>{profile.name}</b><small>{profile.id}</small></p><button onClick={onLogout} title="Sign out">⇥</button></div>
       </aside>
 
       <section className="student-main">
@@ -171,9 +233,10 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
           {page === 'Services' && <Services services={availableServices} active={queue} choices={choices} setChoices={setChoices} onDetails={setSelectedService} onJoin={joinQueue} />}
           {page === 'Calendar' && <Calendar services={availableServices} active={queue} choices={choices} onJoin={joinQueue} />}
           {page === 'My Queue' && <MyQueue queue={queue} cancelling={cancelling} onCancel={cancelQueue} go={go} />}
+          {page === 'Live Monitor' && <LiveMonitor offices={officeState} />}
           {page === 'History' && <History history={history} onRate={setSelectedService} />}
           {page === 'Review' && <Review history={history} onRate={setSelectedService} />}
-          {page === 'Profile' && <Profile profile={profile} onSave={saveProfile} onPasswordSave={(password) => saveProfile({password})} onLogout={onLogout} />}
+          {page === 'Profile' && <Profile profile={profile} onSave={saveProfile} onPasswordSave={(password) => saveProfile({password})} onAvatarPreview={(avatar) => setProfile((current) => ({ ...current, avatar }))} onLogout={onLogout} />}
         </div>
       </section>
 
@@ -268,6 +331,11 @@ function Calendar({ services, active, choices, onJoin }) {
   </>
 }
 
+function LiveMonitor({ offices }) {
+  const waiting = offices.reduce((sum, office) => sum + (office.waiting || 0), 0)
+  return <><Title title="Live queue monitor" subtitle="Check campus-wide queue activity before you head to an office." action={<span className="status-chip">● {waiting} waiting now</span>} /><section className="student-monitor-grid">{offices.map((office) => <article key={office.id}><div className="student-monitor-head"><span>{office.code || office.name[0]}</span><section><h2>{office.name}</h2><p>{office.open ? 'Open for tickets' : 'Currently closed'}</p></section><em className={office.open ? 'open' : 'closed'}>{office.open ? 'Open' : 'Closed'}</em></div><dl><span><small>Waiting</small><b>{office.waiting || 0}</b></span><span><small>Now serving</small><b>{office.serving || '—'}</b></span><span><small>Served today</small><b>{office.served || 0}</b></span></dl></article>)}</section></>
+}
+
 function Review({ history, onRate }) {
   const completed = history.filter((item) => item.result === 'Served')
   return <><Title title="Service reviews" subtitle="Rate completed services from 1 to 5 stars and share your experience." />
@@ -275,39 +343,65 @@ function Review({ history, onRate }) {
   </>
 }
 
-function Profile({ profile, onSave, onPasswordSave, onLogout }) {
+function Profile({ profile, onSave, onPasswordSave, onAvatarPreview, onLogout }) {
   const [form, setForm] = useState({ ...profile, newPassword: '', confirmPassword: '' })
   const [error, setError] = useState('')
-  const update = ({ target }) => setForm((current) => ({ ...current, [target.name]: target.value }))
+  const [editing, setEditing] = useState(false)
+  const update = ({ target }) => setForm((current) => {
+    const nextValue = target.value
+    // Courses and senior-high strands are separate sets of choices.
+    const course = target.name === 'yearLevel' && isSeniorHigh(current.yearLevel) !== isSeniorHigh(nextValue)
+      ? ''
+      : current.course
+    return { ...current, [target.name]: nextValue, course }
+  })
+  const selectPhoto = ({ target }) => {
+    const photo = target.files?.[0]
+    target.value = ''
+    if (!photo) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(photo.type) || photo.size > 500 * 1024) return setError('Choose a PNG, JPEG, or WebP image smaller than 500 KB.')
+    const reader = new FileReader()
+    reader.onload = () => { const avatar = String(reader.result || ''); setForm((current) => ({ ...current, avatar })); onAvatarPreview(avatar); setError('') }
+    reader.readAsDataURL(photo)
+  }
   const submit = async (event) => {
     event.preventDefault()
+    if (!editing) return
     if (form.newPassword && form.newPassword !== form.confirmPassword) return setError('New passwords do not match.')
     setError('')
     const { newPassword, confirmPassword: _confirmPassword, ...nextProfile } = form
     if (!await onSave({...nextProfile,password:newPassword || undefined})) return
     setForm((current) => ({ ...current, newPassword: '', confirmPassword: '' }))
+    setEditing(false)
   }
   const savePassword = async () => {
+    if (!editing) return
     if (!validPassword(form.newPassword) || form.newPassword !== form.confirmPassword) return setError(`Passwords must match. ${passwordRule}`)
     if (!await onPasswordSave(form.newPassword)) return
     setError('')
     setForm((current) => ({ ...current, newPassword: '', confirmPassword: '' }))
   }
-  return <><Title title="My profile" subtitle="Update your student credentials and account details." />
+  const cancelEditing = () => {
+    setForm({ ...profile, newPassword: '', confirmPassword: '' })
+    onAvatarPreview(profile.avatar || '')
+    setError('')
+    setEditing(false)
+  }
+  return <><Title title="My profile" subtitle={editing ? 'Update your student credentials and account details.' : 'Your student credentials are locked until you choose Edit profile.'} />
     <form className="profile-card profile-editor" onSubmit={submit}>
-      <div className="profile-main"><span>{initials(form.name)}</span><div><h2>{form.name || 'Student'}</h2><p>{form.email || 'Add your email address'}</p><em>Student</em></div></div>
+      <div className="profile-main"><div className="profile-avatar">{form.avatar ? <img src={form.avatar} alt="Profile preview" /> : <span>{initials(form.name)}</span>}</div><div><h2>{form.name || 'Student'}</h2><p>{form.email || 'Add your email address'}</p><em>Student</em></div><div className="profile-photo-actions">{editing && <><label>Change photo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectPhoto}/></label>{form.avatar && <button type="button" onClick={() => { setForm((current) => ({ ...current, avatar: '' })); onAvatarPreview('') }}>Remove</button>}</>}<small>{editing ? 'PNG, JPEG, or WebP · max 500 KB' : 'Profile is locked'}</small></div></div>
       <div className="profile-form-fields">
-        <label>Student ID<input name="id" value={form.id} readOnly placeholder="03-1234-123456" pattern="03-[0-9]{4}-[0-9]{5,6}" title="Use 03-1234-12345 or 03-1234-123456" required /></label>
-        <label>Full name<input name="name" value={form.name} onChange={update} placeholder="Maria Santos" required /></label>
-        <label>Email address<input name="email" type="email" value={form.email} onChange={update} placeholder="you@school.edu" required /></label>
-        <label>Department<select name="department" value={form.department} onChange={update}><option>SHS</option><option>CAS</option><option>CAHS</option><option>CCJE</option><option>CEA</option><option>CELA</option><option>CHTM</option><option>CITE</option><option>CMA</option></select></label>
-        <label>Year level<select name="yearLevel" value={form.yearLevel} onChange={update}><option>Grade 11</option><option>Grade 12</option><option>First year</option><option>Second year</option><option>Third year</option><option>Fourth year</option></select></label>
-        <label>Semester<select name="semester" value={form.semester} onChange={update}><option>1st semester</option><option>2nd semester</option></select></label>
-        <PasswordField label="New password" name="newPassword" value={form.newPassword} onChange={update} placeholder="Aa1!password" minLength="8" title={passwordRule} />
-        <PasswordField label="Confirm new password" name="confirmPassword" value={form.confirmPassword} onChange={update} placeholder="Repeat password" minLength="8" title={passwordRule} />
-        <button className="profile-password-save" type="button" onClick={savePassword} disabled={!validPassword(form.newPassword) || form.newPassword !== form.confirmPassword}>Save password</button>
+        <label>Student ID<input name="id" value={form.id} readOnly placeholder="Student ID unavailable" title="Your Student ID is set during account creation." /></label>
+        <label>Full name<input name="name" value={form.name} onChange={update} placeholder="Maria Santos" required disabled={!editing} /></label>
+        <label>Email address<input name="email" type="email" value={form.email} onChange={update} placeholder="you@school.edu" required disabled={!editing} /></label>
+        <label>{isSeniorHigh(form.yearLevel) ? 'Strand' : 'Course'}<select name="course" value={form.course} onChange={update} disabled={!editing}><option value="">{isSeniorHigh(form.yearLevel) ? 'Select strand' : 'Select course'}</option>{(isSeniorHigh(form.yearLevel) ? seniorHighStrands : courses).map((course) => <option key={course} value={course}>{course}</option>)}</select></label>
+        <label>Year level<select name="yearLevel" value={form.yearLevel} onChange={update} disabled={!editing}><option>Grade 11</option><option>Grade 12</option><option>First year</option><option>Second year</option><option>Third year</option><option>Fourth year</option></select></label>
+        <label>Semester<select name="semester" value={form.semester} onChange={update} disabled={!editing}><option>1st semester</option><option>2nd semester</option></select></label>
+        <PasswordField label="New password" name="newPassword" value={form.newPassword} onChange={update} placeholder="Enter password" minLength="8" title={passwordRule} disabled={!editing} />
+        <PasswordField label="Confirm new password" name="confirmPassword" value={form.confirmPassword} onChange={update} placeholder="Repeat password" minLength="8" title={passwordRule} disabled={!editing} />
+        <button className="profile-password-save" type="button" onClick={savePassword} disabled={!editing || !validPassword(form.newPassword) || form.newPassword !== form.confirmPassword}>Save password</button>
       </div>
-      <div className="profile-footer"><p className={error ? 'profile-error' : ''}>{error || 'Use a new password only when you want to change it.'}</p><div><button type="button" onClick={onLogout}>Sign out</button><button className="profile-save" type="submit">Save profile</button></div></div>
+      <div className="profile-footer"><p className={error ? 'profile-error' : ''}>{error || (editing ? 'Use a new password only when you want to change it.' : 'Select Edit profile to unlock your credentials.')}</p><div><button type="button" onClick={editing ? cancelEditing : () => setEditing(true)}>{editing ? 'Cancel' : 'Edit profile'}</button><button className="profile-save" type="submit" disabled={!editing}>Save profile</button></div></div>
     </form>
   </>
 }
@@ -327,6 +421,7 @@ function SidebarIcon({ name }) {
     services: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
     calendar: <><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,
     queues: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
+    monitor: <><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z"/><circle cx="12" cy="12" r="2"/></>,
     history: <><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></>,
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>,
     profile: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></>,

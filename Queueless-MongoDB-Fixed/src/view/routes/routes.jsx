@@ -12,6 +12,7 @@ const adminPages = {
   'Offices & Services': '/admin/offices-services',
   Feedback: '/admin/feedback',
   Performance: '/admin/performance',
+  'Audit Logs': '/admin/audit-logs',
   Profile: '/admin/profile',
 }
 
@@ -20,6 +21,7 @@ const studentPages = {
   Services: '/student/services',
   Calendar: '/student/calendar',
   'My Queue': '/student/my-queue',
+  'Live Monitor': '/student/live-monitor',
   History: '/student/history',
   Review: '/student/review',
   Profile: '/student/profile',

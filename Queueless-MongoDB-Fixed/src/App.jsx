@@ -40,6 +40,7 @@ async function formatSession(authSession) {
   }
 
   const role = await getUserRole(authSession.user.id)
+  const metadata = authSession.user.user_metadata || {}
 
   return {
     token: authSession.access_token,
@@ -51,9 +52,14 @@ async function formatSession(authSession) {
       id: authSession.user.id,
       email: authSession.user.email,
       name:
-        authSession.user.user_metadata?.full_name ||
+        metadata.full_name ||
         authSession.user.email,
       role,
+      accountId: metadata.student_id || '',
+      department: metadata.course || '',
+      yearLevel: metadata.year_level || '',
+      semester: metadata.semester || '',
+      avatar: metadata.avatar || '',
       emailVerified:
         Boolean(authSession.user.email_confirmed_at),
     },

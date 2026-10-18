@@ -512,6 +512,32 @@ const officeDefinitions = [
       ],
     ],
   },
+
+  {
+    slug: 'mkt',
+    name: 'Marketing',
+    code: 'M',
+    wait: 4,
+
+    services: [
+      ['Marketing inquiry', ['Valid school ID', 'Relevant request details']],
+      ['Sponsorship / partnership request', ['Valid school ID', 'Request letter or proposal']],
+      ['Branding material request', ['Valid school ID', 'Completed request form']],
+    ],
+  },
+
+  {
+    slug: 'book',
+    name: 'Bookstore',
+    code: 'B',
+    wait: 3,
+
+    services: [
+      ['Textbook purchase inquiry', ['Valid school ID', 'Course or subject details']],
+      ['School supplies purchase', ['Valid school ID']],
+      ['Bookstore order concern', ['Valid school ID', 'Order or receipt details']],
+    ],
+  },
 ]
 
 
@@ -989,7 +1015,7 @@ export function createApp({
   app.use(
     express.json({
       limit:
-        '32kb',
+        '1mb',
     })
   )
 
@@ -1709,6 +1735,55 @@ if (body.privacyConsent !== true) {
 
 
   route(
+    'post',
+    '/api/offices',
+    [
+      'admin',
+    ],
+
+    async ({
+      body,
+    }) => {
+      const name = text(body.name, 'Office name', 80)
+      const code = text(body.code, 'Ticket code', 4).toUpperCase()
+      const service = text(body.service, 'First service', 100)
+      const wait = Number(body.wait)
+
+      if (!/^[A-Z0-9]{1,4}$/.test(code)) {
+        fail('Ticket code must contain one to four letters or numbers.')
+      }
+
+      if (!Number.isInteger(wait) || wait < 1 || wait > 120) {
+        fail('Typical service time must be between 1 and 120 minutes.')
+      }
+
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      if (!slug) fail('Office name must include letters or numbers.')
+
+      if (await Office.exists({ $or: [{ name }, { code }, { slug }] })) {
+        fail('An office with that name or ticket code already exists.', 409)
+      }
+
+      const office = await Office.create({
+        slug,
+        name,
+        code,
+        wait,
+        open: true,
+        sequence: 0,
+        hours: '8:00 AM - 5:00 PM',
+        services: [{ name: service, requirements: ['Valid school ID'] }],
+      })
+
+      return {
+        status: 201,
+        data: { office: apiOffice(office) },
+      }
+    }
+  )
+
+
+  route(
     'patch',
     '/api/auth/profile',
     [],
@@ -1793,6 +1868,34 @@ if (body.privacyConsent !== true) {
               field,
               max
             )
+        }
+      }
+
+      if (
+        body.avatar !==
+        undefined
+      ) {
+        if (
+          body.avatar ===
+          ''
+        ) {
+          user.avatar =
+            ''
+        } else if (
+          typeof body.avatar !==
+          'string' ||
+          body.avatar.length >
+          700000 ||
+          !/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(
+            body.avatar
+          )
+        ) {
+          fail(
+            'Use a PNG, JPEG, or WebP profile photo smaller than 500 KB.'
+          )
+        } else {
+          user.avatar =
+            body.avatar
         }
       }
 
@@ -2470,6 +2573,18 @@ if (body.privacyConsent !== true) {
                 'Never',
             })
           )
+
+        const trendDates = Array.from({ length: 7 }, (_, index) => {
+          const date = new Date()
+          date.setDate(date.getDate() - (6 - index))
+          return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(date)
+        })
+        const trendCounts = await Ticket.aggregate([
+          { $match: { visitDate: { $in: trendDates } } },
+          { $group: { _id: '$visitDate', count: { $sum: 1 } } },
+        ])
+        const trendMap = new Map(trendCounts.map((item) => [item._id, item.count]))
+        data.queueTrends = trendDates.map((date) => ({ date, count: trendMap.get(date) || 0 }))
       }
 
 
@@ -3319,17 +3434,13 @@ if (body.privacyConsent !== true) {
       const user =
         await User.create({
           name:
-            nameValue(
-              body.name
-            ),
+            email.split('@')[0],
 
           email,
 
           passwordHash:
             hash(
-              passwordValue(
-                body.password
-              )
+              crypto.randomBytes(32).toString('base64url')
             ),
 
           role:
@@ -3578,6 +3689,32 @@ if (body.privacyConsent !== true) {
         user:
           publicUser(user),
       }
+    }
+  )
+
+
+  route(
+    'delete',
+    '/api/admin/users/:id',
+    [
+      'admin',
+    ],
+
+    async ({ req }) => {
+      const user = await User.findById(req.params.id)
+
+      if (!user || user.role === 'admin') {
+        fail('Managed account not found.', 404)
+      }
+
+      await Session.deleteMany({ userId: user._id })
+      await Ticket.updateMany(
+        { studentId: user._id, status: { $in: activeStatuses } },
+        { $set: { status: 'cancelled', completedAt: new Date() } }
+      )
+      await user.deleteOne()
+
+      return { deleted: true }
     }
   )
 

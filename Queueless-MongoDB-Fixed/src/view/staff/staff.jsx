@@ -6,6 +6,8 @@ const serviceData = {
   Registrar: { code: 'R', description: 'Academic records, enrollment and certifications', requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
   Finance: { code: 'F', description: 'Payments, balances, receipts and assessments', requirements: ['Valid school ID', 'Payment or reference document', 'Assessment form when applicable'] },
   CSDL: { code: 'C', description: 'Student services, IDs, clearances and concerns', requirements: ['Valid school ID', 'Relevant clearance or concern form'] },
+  Marketing: { code: 'M', description: 'Marketing support, partnerships, and branding requests', requirements: ['Valid school ID', 'Relevant request details'] },
+  Bookstore: { code: 'B', description: 'Textbooks, school supplies, and bookstore order support', requirements: ['Valid school ID', 'Order or receipt details'] },
 }
 
 const initials = (name = '') => name.split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0,2).toUpperCase() || 'ST'
@@ -19,13 +21,15 @@ export default function Staff({ onLogout, user, token }) {
   const [recentlyServed, setRecentlyServed] = useState(null)
   const [selected, setSelected] = useState(null)
   const [feedback, setFeedback] = useState([])
+  const [officeState, setOfficeState] = useState([])
   const [officeOpen, setOfficeOpen] = useState(false)
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState(() => user?.office ? `You have been assigned to the ${user.office} office.` : '')
   const [requirements, setRequirements] = useState(() => Object.fromEntries(Object.entries(serviceData).map(([office, data]) => [office, [...data.requirements]])))
   const [staffProfile, setStaffProfile] = useState(() => ({ name: user?.name || 'Ana Reyes', email: user?.email || 'staff@school.edu', office: user?.office || 'Registrar' }))
   const [schedule, setSchedule] = useState(() => user?.schedule || [])
 
   const applyState = useCallback(({offices,tickets,feedback}) => {
+    setOfficeState(offices)
     const names=Object.fromEntries(offices.map(o=>[o.id,o.name]))
     const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date())
     const entries=tickets.filter(t=>t.visitDate===date).map(t=>({...t,ticketId:t.id,id:t.accountId || t.studentId,office:names[t.officeId],joined:new Date(t.createdAt).toLocaleTimeString()})).sort((a,b)=>a.order-b.order)
@@ -78,13 +82,14 @@ export default function Staff({ onLogout, user, token }) {
     catch(error){notify(error.message)}
   }
 
-  const tabs = [['queues','Queue'], ['calendar','Schedule'], ['student','Students'], ['check','Requirements'], ['star','Feedback'], ['profile','Profile']]
+  const tabs = [['queues','Queue'], ['monitor','Live Monitor'], ['calendar','Schedule'], ['student','Students'], ['check','Requirements'], ['star','Feedback'], ['profile','Profile']]
+  const tabSections = [['Workspace',['Queue','Live Monitor','Schedule']],['Service desk',['Students','Requirements','Feedback']],['Account',['Profile']]]
 
   return (
     <main className="staff-app">
       <aside className="staff-sidebar">
-        <div className="staff-brand"><img className="staff-mark" src="/queue-logo.png" alt="" /><div><b>Queueless</b><small>Staff workspace</small></div></div>
-        <nav>{tabs.map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => setPage(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</nav>
+        <div className="staff-brand"><img className="staff-mark" src="/campus-queue-logo.png" alt="" /><div><b>Queueless</b><small>Staff workspace</small></div></div>
+        <nav>{tabSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{tabs.filter(([,label]) => labels.includes(label)).map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => setPage(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</div>)}</nav>
         <div className="staff-account"><span>{initials(user?.name || 'Ana Reyes')}</span><p><b>{user?.name || 'Ana Reyes'}</b><small>Service staff</small></p><button onClick={onLogout}>⇥</button></div>
       </aside>
 
@@ -93,10 +98,11 @@ export default function Staff({ onLogout, user, token }) {
         <div className="staff-content">
           {notice && <div className="feature-notice">{notice}</div>}
           <StaffTitle page={page} office={activeService} waiting={queue.length} />
-          {page !== 'Feedback' && page !== 'Profile' && <OfficeTabs assigned={user?.office} active={activeService} queues={queues} onChange={switchOffice} />}
+          {page !== 'Feedback' && page !== 'Profile' && page !== 'Live Monitor' && <OfficeTabs assigned={user?.office} active={activeService} queues={queues} offices={officeState} onChange={switchOffice} />}
           {page === 'Queue' && <QueuePage open={officeOpen} office={activeService} queue={queue} current={current} recentlyServed={recentlyServed} selected={selected} onSelect={setSelected} callNext={callNext} skip={skipCurrent} recall={() => recall()} served={markServed} />}
+          {page === 'Live Monitor' && <LiveMonitor offices={officeState} />}
           {page === 'Students' && <StudentsPage office={activeService} queue={queue} current={current} skipped={skipped.filter((item) => item.office === activeService)} selected={selected} onSelect={setSelected} recall={recall} />}
-          {page === 'Requirements' && <Requirements office={activeService} requirements={requirements[activeService]} onAdd={addRequirement} />}
+          {page === 'Requirements' && <Requirements office={activeService} officeInfo={officeState.find((office) => office.name === activeService)} requirements={requirements[activeService] || []} onAdd={addRequirement} />}
           {page === 'Feedback' && <Feedback recent={feedback} />}
           {page === 'Schedule' && <ScheduleEditor schedule={schedule} onSave={saveSchedule} />}
           {page === 'Profile' && <StaffProfile profile={staffProfile} onSave={saveProfile} />}
@@ -109,6 +115,7 @@ export default function Staff({ onLogout, user, token }) {
 function StaffTitle({ page, office, waiting }) {
   const copy = {
     Queue: ['Queue control', `Call and manage ${office} queue numbers in real time.`],
+    'Live Monitor': ['Live queue monitor', 'Read campus-wide queue status as it updates in real time.'],
     Students: ['Student information', 'Review waiting, called, and skipped student tickets.'],
     Requirements: ['Service requirements', 'Edit the documents students should bring before processing.'],
     Feedback: ['Student feedback', 'View ratings and comments from completed queue transactions.'],
@@ -125,13 +132,19 @@ function SidebarIcon({ name }) {
     check: <path d="m5 12 4 4L19 6"/>,
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>,
     calendar: <><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,
+    monitor: <><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z"/><circle cx="12" cy="12" r="2"/></>,
     profile: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
 
-function OfficeTabs({ assigned, active, queues, onChange }) {
-  return <div className="staff-office-tabs">{Object.keys(serviceData).filter(office=>office===assigned).map((office) => <button className={active === office ? 'active' : ''} onClick={() => onChange(office)} key={office}><span>{serviceData[office].code}</span><b>{office}</b><em>{queues[office]?.length || 0}</em></button>)}</div>
+function LiveMonitor({ offices }) {
+  const waiting = offices.reduce((sum, office) => sum + (office.waiting || 0), 0)
+  return <><section className="staff-monitor-banner"><span>LIVE</span><b>{waiting} waiting campus-wide</b><small>Updates automatically while this page is open.</small></section><section className="staff-monitor-grid">{offices.map((office) => <article key={office.id}><div><span>{office.code || office.name[0]}</span><section><h2>{office.name}</h2><p>{office.open ? 'Accepting tickets' : 'Currently closed'}</p></section><em className={office.open ? 'open' : 'closed'}>{office.open ? 'Open' : 'Closed'}</em></div><dl><span><small>Waiting</small><b>{office.waiting || 0}</b></span><span><small>Serving</small><b>{office.serving || '—'}</b></span><span><small>Served today</small><b>{office.served || 0}</b></span></dl></article>)}</section></>
+}
+
+function OfficeTabs({ assigned, active, queues, offices, onChange }) {
+  return <div className="staff-office-tabs">{offices.filter((office) => office.name === assigned).map((office) => <button className={active === office.name ? 'active' : ''} onClick={() => onChange(office.name)} key={office.id}><span>{office.code}</span><b>{office.name}</b><em>{queues[office.name]?.length || 0}</em></button>)}</div>
 }
 
 function QueuePage({ open, office, queue, current, recentlyServed, selected, onSelect, callNext, skip, recall, served }) {
@@ -173,11 +186,11 @@ function StudentsPage({ office, queue, current, skipped, selected, onSelect, rec
 }
 
 function StudentInfo({ student, status }) {
-  return <aside className="student-info-card"><div className="student-info-head"><div><span>{initials(student.name)}</span><section><small>SELECTED STUDENT</small><h3>{student.name}</h3><p>{student.id}</p></section></div><em>{status}</em></div><dl><div><dt>Queue ticket</dt><dd>{student.ticket}</dd></div><div><dt>Requested service</dt><dd>{student.service}</dd></div><div><dt>Joined queue</dt><dd>{student.joined}</dd></div><div><dt>Office</dt><dd>{student.ticket.slice(0,1) === 'R' ? 'Registrar' : student.ticket.slice(0,1) === 'F' ? 'Finance' : 'CSDL'}</dd></div></dl></aside>
+  return <aside className="student-info-card"><div className="student-info-head"><div><span>{initials(student.name)}</span><section><small>SELECTED STUDENT</small><h3>{student.name}</h3><p>{student.id}</p></section></div><em>{status}</em></div><dl><div><dt>Queue ticket</dt><dd>{student.ticket}</dd></div><div><dt>Requested service</dt><dd>{student.service}</dd></div><div><dt>Joined queue</dt><dd>{student.joined}</dd></div><div><dt>Office</dt><dd>{student.office}</dd></div></dl></aside>
 }
 
-function Requirements({ office, requirements, onAdd }) {
-  const data = serviceData[office]
+function Requirements({ office, officeInfo, requirements, onAdd }) {
+  const data = serviceData[office] || { code: officeInfo?.code || office[0], description: `Services and assistance from the ${office} office` }
   const [draft, setDraft] = useState('')
   return <section className="requirements-page"><article className="requirement-hero"><span>{data.code}</span><div><p className="float-kicker">{office.toUpperCase()} OFFICE</p><h2>{data.description}</h2><p>Edit this checklist so students know what to bring before joining the queue.</p></div></article><article className="requirement-card"><div className="staff-list-head"><div><h2>Editable document checklist</h2><p>Requirements shown to students for this office.</p></div><span>{requirements.length} items</span></div>{requirements.map((item,index) => <div className="requirement-row" key={`${item}-${index}`}><span>{index+1}</span><b>{item}</b><em>Required</em></div>)}<form className="requirement-add" onSubmit={(event) => { event.preventDefault(); onAdd(office, draft); setDraft('') }}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add another requirement..." /><button>Add requirement</button></form></article></section>
 }
