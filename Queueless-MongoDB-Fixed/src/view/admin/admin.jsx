@@ -29,6 +29,7 @@ const initials = (name='') => name.split(' ').filter(Boolean).map((p)=>p[0]).joi
 
 export default function Admin({ onLogout, user, token, page = 'Overview', onNavigate }) {
   const [menuOpen,setMenuOpen] = useState(false)
+  const [adminName,setAdminName] = useState(()=>localStorage.getItem(`queueless-admin-name-${user.id}`)||user.name||'School Admin')
   const [students,setStudents] = useState([])
   const [staff,setStaff] = useState([])
   const [offices,setOffices] = useState(initialOffices.map(o=>({...o,waiting:0,served:0,serving:"",rating:0,completion:0,avgWait:0})))
@@ -112,11 +113,56 @@ const toggleStudent = async (id) => {
   }
 }
 
-  const toggleStaff=async(id)=>{const u=staff.find(u=>u.id===id);if(!u)return false;const nextStatus=u.status==='Active'?'Inactive':'Active';const saved=await mutate('/api/admin/users/'+id,'PATCH',{status:nextStatus});if(saved)recordAudit(`${nextStatus === 'Active' ? 'Reactivated' : 'Deactivated'} staff account`,u.name);return saved}
-  const deleteStudent=async(student)=>{if(!window.confirm(`Delete ${student.name}'s student profile? This cannot be undone.`))return;try{await deleteStudentProfile(student.id);await refresh();recordAudit('Deleted student profile',student.name);notify('Student profile deleted.')}catch(error){notify(error.message)}}
+const toggleStaff = (id) => {
+  
+const deleteStaff = async (member) => {
+  if (!member?.id) {
+    notify('Invalid staff account.');
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete ${member.name}'s account?\n\n` +
+    'The account will be deactivated and removed from the Staff list.'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const result = await portalApi(
+      `/api/admin/staff/${encodeURIComponent(member.id)}`,
+      token,
+      {
+        method: 'DELETE'
+      }
+    );
+
+    await refresh();
+
+    notify(
+      result.message || 'Staff account deleted successfully.'
+    );
+  } catch (error) {
+    notify(error.message || 'Failed to delete staff account.');
+  }
+};
+
+  const u = staff.find(u => u.id === id);
+
+  return mutate(
+    '/api/admin/users/' + id,
+    'PATCH',
+    {
+      status: u.status === 'Active'
+        ? 'Inactive'
+        : 'Active'
+    }
+  );
+};  const deleteStudent=async(student)=>{if(!window.confirm(`Delete ${student.name}'s student profile? This cannot be undone.`))return;try{await deleteStudentProfile(student.id);await refresh();recordAudit('Deleted student profile',student.name);notify('Student profile deleted.')}catch(error){notify(error.message)}}
   const deleteStaff=async(member)=>{if(!window.confirm(`Delete ${member.name}'s staff account? This cannot be undone.`))return;try{await portalApi('/api/admin/users/'+member.id,token,{method:'DELETE'});await refresh();recordAudit('Deleted staff account',member.name);notify('Staff account deleted.')}catch(error){notify(error.message)}}
   const reviewStaff=(id,action)=>mutate('/api/admin/staff/'+id+'/approval','PATCH',{action})
   const toggleOffice=(id)=>mutate('/api/offices/'+id,'PATCH',{open:!offices.find(o=>o.id===id).open})
+  const deleteOffice=async(office)=>{if(!window.confirm(`Delete ${office.name}? This removes its services and cannot be undone.`))return;try{await portalApi('/api/offices/'+office.id,token,{method:'DELETE'});await refresh();recordAudit('Deleted office',office.name);notify('Office deleted.')}catch(error){notify(error.message)}}
   const addRequirement=(id,serviceIndex,requirement)=>mutate('/api/offices/'+id+'/requirements','POST',{serviceIndex,requirement})
   const addStaff=async(entry)=>{if(await mutate('/api/admin/staff','POST',entry))setAddStaffOpen(false)}
   const addOffice=async(entry)=>{if(await mutate('/api/offices','POST',entry))setAddOfficeOpen(false)}
@@ -132,17 +178,27 @@ const toggleStudent = async (id) => {
     Overview:<Overview offices={offices} students={students} staff={staff} queueTrends={queueTrends} setPage={go} />,
     'Live Queues':<LiveQueues offices={offices} />,
     Students:<Students students={students} toggleStudent={toggleStudent} onDelete={deleteStudent} />,
-    Staff:<StaffScheduleManager staff={staff} toggleStaff={toggleStaff} reviewStaff={reviewStaff} onDelete={deleteStaff} onAdd={()=>setAddStaffOpen(true)} onSchedule={setScheduleMember} />,
-    'Offices & Services':<OfficeManager offices={offices} toggleOffice={toggleOffice} addRequirement={addRequirement} onAdd={()=>setAddOfficeOpen(true)} />,
+    Staff: (
+  <StaffScheduleManager
+    staff={staff}
+    toggleStaff={toggleStaff}
+    reviewStaff={reviewStaff}
+    onAdd={() => setAddStaffOpen(true)}
+    onSchedule={setScheduleMember}
+    onDelete={deleteStaff}
+  />
+),
+    'Offices & Services':<OfficeManager offices={offices} toggleOffice={toggleOffice} addRequirement={addRequirement} onDelete={deleteOffice} onAdd={()=>setAddOfficeOpen(true)} />,
     Feedback:<FeedbackPage feedback={feedback} offices={offices} />,
     Performance:<Performance offices={offices} />,
     'Audit Logs':<AuditLogs logs={auditLogs} />,
-    Profile:<Profile user={user} token={token} />,
+    Profile:<Profile user={{...user,name:adminName}} token={token} onNameSaved={(name)=>{setAdminName(name);localStorage.setItem(`queueless-admin-name-${user.id}`,name)}} />,
   }[page]
 
   return <main className="admin-app">
     {menuOpen && <button className="admin-backdrop" aria-label="Close menu" onClick={()=>setMenuOpen(false)} />}
     <aside className={`admin-sidebar ${menuOpen?'open':''}`}>
+      <div className="admin-profile admin-profile-card"><span>{initials(adminName)}</span><div><b>{adminName}</b><small>Administrator</small></div><button type="button" onClick={onLogout} title="Sign out" aria-label="Sign out">Sign out <span aria-hidden="true">→</span></button></div>
       <div className="admin-logo"><Mark/><div><b>Queueless</b><small>Admin console</small></div><button className="close-admin-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
       <nav>{navSections.map(([section,names])=><div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{nav.filter(([name])=>names.includes(name)).map(([name,icon])=><button className={page===name?'selected':''} onClick={()=>go(name)} key={name}><i><NavIcon name={icon}/></i><span>{name}</span>{name==='Live Queues'&&<em>{offices.reduce((n,o)=>n+o.waiting,0)}</em>}</button>)}</div>)}</nav>
       <div className="admin-profile"><span>{initials('School Admin')}</span><div><b>School Admin</b><small>Administrator</small></div><button type="button" onClick={onLogout} title="Log out" aria-label="Log out">⇥</button></div>
@@ -258,12 +314,18 @@ function StaffManager({ staff,toggleStaff,reviewStaff,onAdd }){
   </>
 }
 
-function OfficeManager({ offices,toggleOffice,addRequirement,onAdd }){
+function OldOfficeManager({ offices,toggleOffice,addRequirement,onAdd }){
   const [expanded,setExpanded]=useState(offices[0].id)
   const [drafts,setDrafts]=useState({})
   return <><PageTitle title="Offices & services" subtitle="Control office availability and keep student-facing service requirements accurate." action={<button className="admin-primary" onClick={onAdd}>+ Add office</button>}/>
     <section className="office-manager-list">{offices.map((office)=><article className={expanded===office.id?'expanded':''} key={office.id}><div className="office-manager-head"><button className="office-main-button" onClick={()=>setExpanded(expanded===office.id?null:office.id)}><span>{office.code}</span><div><h2>{office.name}</h2><p>{office.services.length} services · {office.hours}</p></div><em>{expanded===office.id?'−':'+'}</em></button><label className="office-switch"><input type="checkbox" checked={office.open} onChange={()=>toggleOffice(office.id)}/><i/><span>{office.open?'Open':'Closed'}</span></label></div>{expanded===office.id&&<div className="service-manager">{office.services.map((service,index)=><section key={service.name}><div className="service-manager-title"><div><span>SERVICE {index+1}</span><h3>{service.name}</h3></div><em>{service.requirements.length} requirements</em></div><div className="requirements-admin-list">{service.requirements.map((req,reqIndex)=><p key={`${req}-${reqIndex}`}><i>✓</i>{req}</p>)}</div><form onSubmit={(e)=>{e.preventDefault();const key=`${office.id}-${index}`;addRequirement(office.id,index,drafts[key]||'');setDrafts((d)=>({...d,[key]:''}))}}><input value={drafts[`${office.id}-${index}`]||''} onChange={(e)=>setDrafts((d)=>({...d,[`${office.id}-${index}`]:e.target.value}))} placeholder="Add another requirement..."/><button>Add</button></form></section>)}</div>}</article>)}</section>
   </>
+}
+
+function OfficeManager({ offices, toggleOffice, addRequirement, onDelete, onAdd }) {
+  const [expanded,setExpanded]=useState(offices[0]?.id)
+  const [drafts,setDrafts]=useState({})
+  return <><PageTitle title="Offices & services" subtitle="Control office availability and keep student-facing service requirements accurate." action={<button className="admin-primary" onClick={onAdd}>+ Add office</button>}/><section className="office-manager-list">{offices.map((office)=><article className={expanded===office.id?'expanded':''} key={office.id}><div className="office-manager-head"><button className="office-main-button" onClick={()=>setExpanded(expanded===office.id?null:office.id)}><span>{office.code}</span><div><h2>{office.name}</h2><p>{office.services.length} services · {office.hours}</p></div><em>{expanded===office.id?'−':'+'}</em></button><label className="office-switch"><input type="checkbox" checked={office.open} onChange={()=>toggleOffice(office.id)}/><i/><span>{office.open?'Open':'Closed'}</span></label><button className="office-delete" onClick={()=>onDelete(office)}>Delete</button></div>{expanded===office.id&&<div className="service-manager">{office.services.map((service,index)=><section key={service.name}><div className="service-manager-title"><div><span>SERVICE {index+1}</span><h3>{service.name}</h3></div><em>{service.requirements.length} requirements</em></div><div className="requirements-admin-list">{service.requirements.map((req,reqIndex)=><p key={`${req}-${reqIndex}`}><i>✓</i>{req}</p>)}</div><form onSubmit={(event)=>{event.preventDefault();const key=`${office.id}-${index}`;addRequirement(office.id,index,drafts[key]||'');setDrafts((current)=>({...current,[key]:''}))}}><input value={drafts[`${office.id}-${index}`]||''} onChange={(event)=>setDrafts((current)=>({...current,[`${office.id}-${index}`]:event.target.value}))} placeholder="Add another requirement..."/><button>Add</button></form></section>)}</div>}</article>)}</section></>
 }
 
 function FeedbackPage({ feedback,offices }){
@@ -289,13 +351,13 @@ function Performance({ offices }){
   </>
 }
 
-function Profile({ user, token }){
+function Profile({ user, token, onNameSaved }){
   const [form,setForm]=useState({name:user.name,email:user.email,password:'',confirmPassword:''})
   const [notice,setNotice]=useState('')
   const [passwordVisible,setPasswordVisible]=useState(false)
   const [confirmPasswordVisible,setConfirmPasswordVisible]=useState(false)
   const update=({target})=>setForm((current)=>({...current,[target.name]:target.value}))
-  const submit=async(event)=>{event.preventDefault();if(form.password!==form.confirmPassword)return setNotice('Passwords do not match.');try{await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify(form)});setNotice('Profile saved successfully.');setForm(current=>({...current,password:'',confirmPassword:''}))}catch(error){setNotice(error.message)}}
+  const submit=async(event)=>{event.preventDefault();if(form.password!==form.confirmPassword)return setNotice('Passwords do not match.');try{await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify(form)});onNameSaved(form.name.trim());setNotice('Profile saved successfully.');setForm(current=>({...current,password:'',confirmPassword:''}))}catch(error){setNotice(error.message)}}
   return <><PageTitle title="Admin profile" subtitle="Update your administrator account details."/><form className="admin-profile-editor" onSubmit={submit}><div className="admin-profile-heading"><span>{initials(form.name)}</span><div><h2>{form.name}</h2><p>Administrator account</p></div></div><div className="admin-profile-fields"><label>Full name<input name="name" value={form.name} onChange={update} required /></label><label>Email address<input name="email" type="email" value={form.email} onChange={update} required /></label><label className="admin-password-field">Password<span><input name="password" type={passwordVisible ? 'text' : 'password'} value={form.password} onChange={update} placeholder="New password" minLength="8" /><button type="button" onClick={()=>setPasswordVisible((visible)=>!visible)} aria-label={passwordVisible ? 'Hide password' : 'Show password'} title={passwordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={passwordVisible}/></button></span></label><label className="admin-password-field">Confirm password<span><input name="confirmPassword" type={confirmPasswordVisible ? 'text' : 'password'} value={form.confirmPassword} onChange={update} placeholder="Repeat password" minLength="8" /><button type="button" onClick={()=>setConfirmPasswordVisible((visible)=>!visible)} aria-label={confirmPasswordVisible ? 'Hide password' : 'Show password'} title={confirmPasswordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={confirmPasswordVisible}/></button></span></label></div><div className="admin-profile-footer"><p className={notice.includes('match')?'profile-error':''}>{notice||'Leave passwords blank to keep your current password.'}</p><button className="admin-primary">Save profile</button></div></form></>}
 
 function AddStaffModal({ offices,onClose,onAdd }){
@@ -315,11 +377,148 @@ function OldStaffScheduleManager({ staff, toggleStaff, reviewStaff, onDelete, on
   return <><PageTitle title="Staff accounts & schedules" subtitle="Manage staff access and edit each staff member’s weekly shifts." action={<button className="admin-primary" onClick={onAdd}>+ Add staff</button>}/><section className="manager-card"><div className="manager-tools"><div className="search-box">Search <input value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Search staff name, email, or office..."/></div><span className="result-count">{visible.length} accounts</span></div><div className="staff-admin-grid">{visible.map((member)=><article key={member.id}><div className="staff-person"><span>{initials(member.name)}</span><div><h3>{member.name}</h3><p>{member.email}</p></div><em className={member.status.toLowerCase()}>{member.status}</em></div><div className="staff-meta"><span><small>Assigned office</small><b>{member.office}</b></span><span><small>Weekly shifts</small><b>{member.schedule?.length || 0} scheduled</b></span></div><button className="schedule-edit" onClick={()=>onSchedule(member)}>Edit schedule</button>{member.status==='Pending'?<div className="staff-review-actions"><button className="approve" onClick={()=>reviewStaff(member.id,'approve')}>Approve</button><button className="reject" onClick={()=>reviewStaff(member.id,'reject')}>Reject</button></div>:<button onClick={()=>toggleStaff(member.id)}>{member.status==='Active'?'Deactivate account':'Reactivate account'}</button>}</article>)}</div></section></>
 }
 
-function StaffScheduleManager({ staff, toggleStaff, reviewStaff, onDelete, onAdd, onSchedule }) {
-  const [search,setSearch]=useState('')
-  const visible=staff.filter((member)=>`${member.name} ${member.email} ${member.office}`.toLowerCase().includes(search.toLowerCase()))
-  return <><PageTitle title="Staff accounts & schedules" subtitle="Manage staff access and edit each staff member's weekly shifts." action={<button className="admin-primary" onClick={onAdd}>+ Add staff</button>}/><section className="manager-card"><div className="manager-tools"><div className="search-box">Search <input value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Search staff name, email, or office..."/></div><span className="result-count">{visible.length} accounts</span></div><div className="staff-admin-grid">{visible.map((member)=><article key={member.id}><div className="staff-person"><span>{initials(member.name)}</span><div><h3>{member.name}</h3><p>{member.email}</p></div><em className={member.status.toLowerCase()}>{member.status}</em></div><div className="staff-meta"><span><small>Assigned office</small><b>{member.office}</b></span><span><small>Weekly shifts</small><b>{member.schedule?.length || 0} scheduled</b></span></div><button className="schedule-edit" onClick={()=>onSchedule(member)}>Edit schedule</button>{member.status==='Pending'?<div className="staff-review-actions"><button className="approve" onClick={()=>reviewStaff(member.id,'approve')}>Approve</button><button className="reject" onClick={()=>reviewStaff(member.id,'reject')}>Reject</button></div>:<button onClick={()=>toggleStaff(member.id)}>{member.status==='Active'?'Deactivate account':'Reactivate account'}</button>}<button className="delete-account" onClick={()=>onDelete(member)}>Delete account</button></article>)}</div></section></>
+
+function StaffScheduleManager({
+  staff,
+  toggleStaff,
+  reviewStaff,
+  onAdd,
+  onSchedule,
+  onDelete
+}) {
+  const [search, setSearch] = useState('');
+
+  const visible = staff.filter((member) =>
+    `${member.name} ${member.email} ${member.office}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
+
+  return (
+    <>
+      <PageTitle
+        title="Staff accounts & schedules"
+        subtitle="Manage staff access and edit each staff member's weekly shifts."
+        action={
+          <button
+            className="admin-primary"
+            onClick={onAdd}
+          >
+            + Add staff
+          </button>
+        }
+      />
+
+      <section className="manager-card">
+        <div className="manager-tools">
+          <div className="search-box">
+            Search
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search staff name, email, or office..."
+            />
+          </div>
+
+          <span className="result-count">
+            {visible.length} accounts
+          </span>
+        </div>
+
+        <div className="staff-admin-grid">
+          {visible.map((member) => (
+            <article key={member.id}>
+              <div className="staff-person">
+                <span>{initials(member.name)}</span>
+
+                <div>
+                  <h3>{member.name}</h3>
+                  <p>{member.email}</p>
+                </div>
+
+                <em className={member.status.toLowerCase()}>
+                  {member.status}
+                </em>
+              </div>
+
+              <div className="staff-meta">
+                <span>
+                  <small>Assigned office</small>
+                  <b>{member.office}</b>
+                </span>
+
+                <span>
+                  <small>Weekly shifts</small>
+                  <b>
+                    {member.schedule?.length || 0} scheduled
+                  </b>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="schedule-edit"
+                onClick={() => onSchedule(member)}
+              >
+                Edit schedule
+              </button>
+
+              {member.status === 'Pending' ? (
+                <div className="staff-review-actions">
+                  <button
+                    type="button"
+                    className="approve"
+                    onClick={() =>
+                      reviewStaff(member.id, 'approve')
+                    }
+                  >
+                    Approve
+                  </button>
+
+                  <button
+                    type="button"
+                    className="reject"
+                    onClick={() =>
+                      reviewStaff(member.id, 'reject')
+                    }
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleStaff(member.id)}
+                >
+                  {member.status === 'Active'
+                    ? 'Deactivate account'
+                    : 'Reactivate account'}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="delete-account"
+                onClick={() => onDelete(member)}
+              >
+                Delete account
+              </button>
+            </article>
+          ))}
+        </div>
+
+        {visible.length === 0 && (
+          <p className="no-data">
+            No staff accounts found.
+          </p>
+        )}
+      </section>
+    </>
+  );
 }
+
 
 function AuditLogs({ logs }) {
   return <><PageTitle title="Audit logs" subtitle="History of account-management actions performed from this admin console."/><section className="audit-log-card"><div className="audit-log-head"><span>Activity history</span><small>{logs.length} recorded actions</small></div>{logs.length ? logs.map((log)=><article key={log.id}><i>◷</i><div><b>{log.action}</b><p>{log.subject}</p></div><time>{log.time}</time></article>) : <p className="no-data">No account actions have been recorded yet.</p>}</section></>

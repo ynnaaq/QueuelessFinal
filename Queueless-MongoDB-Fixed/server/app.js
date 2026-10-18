@@ -1213,6 +1213,31 @@ export function createApp({
                   email: data.user.email.toLowerCase(),
                   status: 'Active',
                 })
+
+                // Students authenticate through Supabase, while queue records
+                // are stored in MongoDB. Provision the matching local account
+                // on the first verified request so their Supabase session can
+                // use the protected student endpoints.
+                if (!user && data.user.user_metadata?.role === 'student') {
+                  const metadata = data.user.user_metadata || {}
+                  const accountId = String(metadata.student_id || '').trim()
+                  const existingAccountId = accountId
+                    ? await User.exists({ accountId })
+                    : null
+
+                  user = await User.create({
+                    name: String(metadata.full_name || data.user.email).trim(),
+                    email: data.user.email.toLowerCase(),
+                    passwordHash: hash(crypto.randomBytes(32).toString('base64url')),
+                    role: 'student',
+                    status: 'Active',
+                    accountId: existingAccountId ? '' : accountId,
+                    department: String(metadata.course || '').trim(),
+                    yearLevel: String(metadata.year_level || '').trim(),
+                    semester: String(metadata.semester || '').trim(),
+                    emailVerified: Boolean(data.user.email_confirmed_at),
+                  })
+                }
               }
             }
           }
@@ -2498,13 +2523,11 @@ if (body.privacyConsent !== true) {
         user.role ===
         'admin'
       ) {
-        const users =
-          await User
-            .find()
-            .sort({
-              createdAt:
-                -1,
-            })
+        const users = await User.find({
+  deletedAt: null
+}).sort({
+  createdAt: -1
+});
 
 
         const ticketCounts =
@@ -3296,6 +3319,37 @@ if (body.privacyConsent !== true) {
 
 
   route(
+    'delete',
+    '/api/offices/:officeId',
+    [
+      'admin',
+    ],
+
+    async ({ req }) => {
+      const office = await findOffice(req.params.officeId)
+      const hasActiveTickets = await Ticket.exists({
+        officeId: office._id,
+        status: { $in: activeStatuses },
+      })
+      const hasAssignedStaff = await User.exists({
+        role: 'staff',
+        office: office.name,
+      })
+
+      if (hasActiveTickets) {
+        fail('This office has active queue tickets. Close or cancel them before deleting the office.', 409)
+      }
+      if (hasAssignedStaff) {
+        fail('Reassign or remove staff assigned to this office before deleting it.', 409)
+      }
+
+      await office.deleteOne()
+      return { deleted: true }
+    }
+  )
+
+
+  route(
     'post',
     '/api/offices/:officeId/requirements',
     [
@@ -3590,9 +3644,49 @@ if (body.privacyConsent !== true) {
   )
 
 
+  
+route(
+  'delete',
+  '/api/admin/staff/:id',
+  ['admin'],
+  async ({ req, user: admin }) => {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      fail('Invalid staff ID.', 400);
+    }
+
+    const staffMember = await User.findOne({
+      _id: req.params.id,
+      role: 'staff',
+      deletedAt: null
+    });
+
+    if (!staffMember) {
+      fail('Staff account not found.', 404);
+    }
+
+    // Recoverable deletion
+    staffMember.status = 'Inactive';
+    staffMember.deletedAt = new Date();
+    staffMember.deletedBy = admin._id;
+
+    await staffMember.save();
+
+    // Invalidate all MongoDB sessions for the staff account
+    await Session.deleteMany({
+      userId: staffMember._id
+    });
+
+    return {
+      success: true,
+      message: 'Staff account deleted successfully.',
+      deletedStaffId: String(staffMember._id)
+    };
+  }
+);
+
   route(
     'patch',
-    '/api/admin/users/:id',
+    '/api/admin/users/:id/status',
     [
       'admin',
     ],

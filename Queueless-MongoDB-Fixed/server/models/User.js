@@ -90,6 +90,16 @@ const userSchema = new mongoose.Schema(
       default: 'Active'
     },
 
+    deletedAt: {
+    type: Date,
+    default: null
+    },
+    deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+    },
+
     accountId: {
       type: String,
       default: '',
