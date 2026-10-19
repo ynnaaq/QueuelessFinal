@@ -1,3 +1,4 @@
+import { supabase } from '../../lib/supabase.js'
 import { useEffect, useState } from 'react'
 import {
   signUpWithSupabase,
@@ -8,7 +9,6 @@ import {
   verifyPasswordRecoveryOtp,
   updateSupabasePassword,
 } from '../../services/supabaseAuth.js'
-import { supabase } from '../../lib/supabase.js'
 import './login.css'
 
 
@@ -451,7 +451,7 @@ export default function Login({ onLogin }) {
         credentials.password
       )
 
-      if (!result.session) {
+      if (!result.token || !result.user) {
         throw new Error('Sign in failed: no session was returned.')
       }
 
@@ -516,20 +516,11 @@ export default function Login({ onLogin }) {
         }
       )
 
-      if (!result.user) {
-        throw new Error('Supabase did not return a user. Please try again.')
-      }
-
       const email = account.email.trim().toLowerCase()
       setReset((current) => ({ ...current, email, code: '' }))
 
-      if (result.session) {
-        setPage('signin')
-        setMessage('Account created. Please sign in.')
-      } else {
-        setPage('verify')
-        setMessage('Check your school email for the verification code.')
-      }
+      setPage('verify')
+      setMessage(result.message || 'Check your school email for the verification code.')
     } catch (error) {
       console.error('Supabase registration error:', error)
       setMessage(error?.message || 'Registration failed. Please try again.')
@@ -587,22 +578,11 @@ export default function Login({ onLogin }) {
     setMessage('')
 
     try {
-      const { data, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !data.session) {
-        throw new Error('Recovery session expired. Request a new reset code.')
-      }
-
-      await updateSupabasePassword(reset.password)
-      await supabase.auth.signOut()
-
-      const url = new URL(window.location.href)
-      url.searchParams.delete('auth')
-      url.hash = ''
-      window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+      await updateSupabasePassword(reset.email, reset.code, reset.password)
 
       setReset({ email: '', code: '', password: '', confirmPassword: '' })
       setPage('signin')
-      setMessage('Your Supabase password was updated. Sign-in will use it once your Queueless login migration is complete.')
+      setMessage('Your password was updated. You can now sign in.')
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -620,8 +600,6 @@ export default function Login({ onLogin }) {
     setMessage('')
     try {
       await verifySupabaseOtp(reset.email, reset.code)
-      // Prevent a lingering signup session from skipping the login screen.
-      await supabase.auth.signOut()
       setPage('signin')
       setMessage('Email verified successfully. Please sign in.')
     } catch (error) {
@@ -633,8 +611,8 @@ export default function Login({ onLogin }) {
   const resendCode = async () => {
     setMessage('')
     try {
-      await resendSupabaseOtp(reset.email)
-      setMessage('If eligible, a new verification email has been sent.')
+      const result = await resendSupabaseOtp(reset.email)
+      setMessage(result?.message || 'If eligible, a new verification email has been sent.')
     } catch (error) {
       console.error('Supabase resend error:', error)
       setMessage(error?.message || 'Could not resend verification code.')
