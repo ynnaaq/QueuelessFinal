@@ -39,7 +39,7 @@ const subscribe = (listener) => {
   return () => window.removeEventListener('popstate', listener)
 }
 
-export default function AppRoutes({ session, checkingSession, onLogin, onLogout }) {
+export default function AppRoutes({ session, checkingSession, onLogin, onLogout, onRoleChanged }) {
   const pathname = useSyncExternalStore(subscribe, getPathname)
   const role = session?.user?.role
   const route = session?.token && Object.hasOwn(roleRoutes, role) ? roleRoutes[role] : null
@@ -64,10 +64,15 @@ export default function AppRoutes({ session, checkingSession, onLogin, onLogout 
   }
 
   // Verify saved sessions before rendering protected pages or redirecting.
-  if (checkingSession) return null
+  if (checkingSession) {
+    return <main className="app-loading" role="status" aria-live="polite">
+      <strong>Queueless</strong>
+      <span>Loading your session…</span>
+    </main>
+  }
   if (!route) return <Login onLogin={onLogin} />
 
   const Dashboard = route.Component
   const defaultPage = Object.keys(route.pages ?? {})[0] ?? 'Overview'
-  return <Dashboard onLogout={onLogout} user={session.user} token={session.token} page={page ?? defaultPage} onNavigate={navigatePage} />
+  return <Dashboard onLogout={onLogout} user={session.user} token={session.token} page={page ?? defaultPage} onNavigate={navigatePage} onRoleChanged={onRoleChanged} />
 }

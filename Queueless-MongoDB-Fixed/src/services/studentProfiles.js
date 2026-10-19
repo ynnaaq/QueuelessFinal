@@ -1,47 +1,19 @@
+import { getPortalState, portalApi } from './auth.js'
 
-import { supabase } from '../lib/supabase.js'
+const mapStudent = (student) => ({ ...student, queues: '—', last: '—' })
 
-export async function getStudentProfiles() {
-  const { data, error } = await supabase
-    .from('student_profiles')
-    .select(
-      'id, email, full_name, student_id, course, status'
-    )
-    .order('full_name', { ascending: true })
-
-  if (error) throw error
-
-  return (data || []).map((student) => ({
-    id: student.id,
-    name: student.full_name || '',
-    email: student.email || '',
-    accountId: student.student_id || '',
-    department: student.course || '',
-    status: student.status,
-    role: 'student',
-    queues: '—',
-    last: '—'
-  }))
+export async function getStudentProfiles(token) {
+  const { users = [] } = await getPortalState(token)
+  return users.filter((user) => user.role === 'student').map(mapStudent)
 }
 
-export async function updateStudentStatus(id, status) {
-  const { data, error } = await supabase
-    .from('student_profiles')
-    .update({ status })
-    .eq('id', id)
-    .select('id')
-    .single()
+export const updateStudentStatus = (token, id, status) =>
+  portalApi(`/api/admin/users/${encodeURIComponent(id)}/status`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
 
-  if (error) throw error
-
-  return data
-}
-
-export async function deleteStudentProfile(id) {
-  const { error } = await supabase
-    .from('student_profiles')
-    .delete()
-    .eq('id', id)
-
-  if (error) throw error
-}
+export const deleteStudentProfile = (token, id) =>
+  portalApi(`/api/admin/users/${encodeURIComponent(id)}`, token, {
+    method: 'DELETE',
+  })

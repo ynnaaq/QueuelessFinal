@@ -1527,7 +1527,7 @@ if (body.privacyConsent !== true) {
       user.emailVerificationExpiresAt = new Date(Date.now() + emailVerificationLifetimeMs)
       user.emailVerificationAttempts = 0
       await user.save()
-      await sendEmailCode(email, code, 'verify')
+      const delivery = await sendEmailCode(email, code, 'verify')
 
       return {
         status: 201,
@@ -1535,7 +1535,9 @@ if (body.privacyConsent !== true) {
           {
             verificationRequired: true,
             email,
-            message: 'We sent a verification code to your email. Enter it to activate your account.',
+            message: delivery?.transport === 'console'
+              ? 'Local email mode is enabled. Copy the verification code from the API server terminal.'
+              : 'We sent a verification code to your email. Enter it to activate your account.',
           },
       }
     }
@@ -1718,8 +1720,10 @@ if (body.privacyConsent !== true) {
       user.emailVerificationExpiresAt = new Date(Date.now() + emailVerificationLifetimeMs)
       user.emailVerificationAttempts = 0
       await user.save()
-      await sendEmailCode(email, code, 'verify')
-      return response
+      const delivery = await sendEmailCode(email, code, 'verify')
+      return delivery?.transport === 'console'
+        ? { message: 'A new verification code was written to the API server terminal.' }
+        : response
     }
   )
 

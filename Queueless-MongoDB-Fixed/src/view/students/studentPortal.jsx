@@ -4,11 +4,11 @@ import { studentTickets } from '../../services/studentTickets.js'
 import './students.css'
 
 const services = [
-  { office: 'Registrar', icon: '📋', color: '#7357d8', description: 'Academic records, enrollment and certifications', wait: 4, options: ['Transcript / school records', 'Certificate request', 'Enrollment concern'], requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
-  { office: 'Finance', icon: '💳', color: '#1677c8', description: 'Payments, balances, receipts and assessments', wait: 6, options: ['Tuition / school fees', 'Official receipt request', 'Account assessment'], requirements: ['Valid school ID', 'Payment or reference document', 'Assessment form when applicable'] },
-  { office: 'CSDL', icon: '🪪', color: '#d45575', description: 'Student services, IDs, clearances and concerns', wait: 5, options: ['Student clearance', 'ID concern', 'General student concern'], requirements: ['Valid school ID', 'Relevant clearance or concern form'] },
-  { office: 'Marketing', icon: '📣', color: '#e06c47', description: 'Marketing support, partnerships, and branding requests', wait: 4, options: ['Marketing inquiry', 'Sponsorship / partnership request', 'Branding material request'], requirements: ['Valid school ID', 'Relevant request details'] },
-  { office: 'Bookstore', icon: '📚', color: '#278a73', description: 'Textbooks, school supplies, and bookstore order support', wait: 3, options: ['Textbook purchase inquiry', 'School supplies purchase', 'Bookstore order concern'], requirements: ['Valid school ID', 'Order or receipt details'] },
+  { office: 'Registrar', icon: 'registrar', color: '#7357d8', description: 'Academic records, enrollment and certifications', wait: 4, options: ['Transcript / school records', 'Certificate request', 'Enrollment concern'], requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
+  { office: 'Finance', icon: 'finance', color: '#1677c8', description: 'Payments, balances, receipts and assessments', wait: 6, options: ['Tuition / school fees', 'Official receipt request', 'Account assessment'], requirements: ['Valid school ID', 'Payment or reference document', 'Assessment form when applicable'] },
+  { office: 'CSDL', icon: 'student', color: '#d45575', description: 'Student services, IDs, clearances and concerns', wait: 5, options: ['Student clearance', 'ID concern', 'General student concern'], requirements: ['Valid school ID', 'Relevant clearance or concern form'] },
+  { office: 'Marketing', icon: 'marketing', color: '#e06c47', description: 'Marketing support, partnerships, and branding requests', wait: 4, options: ['Marketing inquiry', 'Sponsorship / partnership request', 'Branding material request'], requirements: ['Valid school ID', 'Relevant request details'] },
+  { office: 'Bookstore', icon: 'bookstore', color: '#278a73', description: 'Textbooks, school supplies, and bookstore order support', wait: 3, options: ['Textbook purchase inquiry', 'School supplies purchase', 'Bookstore order concern'], requirements: ['Valid school ID', 'Order or receipt details'] },
 ]
 
 // Keep the profile choices consistent with student registration. The API still
@@ -53,12 +53,23 @@ const seniorHighStrands = [
 const isSeniorHigh = (yearLevel = '') => /^Grade (11|12)$/.test(yearLevel)
 
 const initials = (name = '') => name.split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'S'
+function OfficeIcon({ name = 'office' }) {
+  const icons = {
+    registrar: <><path d="M5 4h14v17H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
+    finance: <><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/></>,
+    student: <><circle cx="12" cy="8" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2M8 14h8"/></>,
+    marketing: <><path d="m4 13 11-5v8L4 11zM15 10h3a2 2 0 0 1 0 4h-3M7 13l1.5 6h3L10 12"/></>,
+    bookstore: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v16H6.5A2.5 2.5 0 0 0 4 21zM20 5.5A2.5 2.5 0 0 0 17.5 3H12v16h5.5A2.5 2.5 0 0 1 20 21z"/></>,
+    office: <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h2M14 7h2M8 12h2M14 12h2M11 21v-5h2"/></>,
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{icons[name] || icons.office}</svg>
+}
 const validSchoolId = (id) => /^03-\d{4}-\d{5,6}$/.test(id || '')
 const validPassword = (password) => password.length >= 8 && !/\s/.test(password) && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) && /[!@#$%^&*]/.test(password)
 const passwordRule = 'Use 8+ characters with uppercase, lowercase, number, and ! @ # $ % ^ & *; no spaces.'
 const campusDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())
 
-export default function StudentPortal({ onLogout, user, token, page = 'Dashboard', onNavigate }) {
+export default function StudentPortal({ onLogout, user, token, page = 'Dashboard', onNavigate, onRoleChanged }) {
   const [officeState, setOfficeState] = useState([])
   const [queue, setQueue] = useState(null)
   const [cancelling, setCancelling] = useState(false)
@@ -69,6 +80,8 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
   const [history, setHistory] = useState([])
   const [selectedService, setSelectedService] = useState(null)
   const [notice, setNotice] = useState('')
+  const [promotionNotice, setPromotionNotice] = useState(null)
+  const [promotionOpen, setPromotionOpen] = useState(false)
   const [choices, setChoices] = useState(() => Object.fromEntries(services.map((service) => [service.office, service.options[0]])))
   const [profile, setProfile] = useState(() => ({ name: user?.name || 'Student', email: user?.email || '', id: validSchoolId(user?.accountId) ? user.accountId : '', course: user?.course || user?.department || '', yearLevel: user?.yearLevel || 'First year', semester: user?.semester || '1st semester', avatar: user?.avatar || '' }))
   const [returningUser] = useState(() => {
@@ -145,11 +158,24 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
     const timer=setInterval(poll,2000)
     return ()=>{disposed=true;clearInterval(timer)}
   }, [token, applyState])
+
+  useEffect(() => {
+    let disposed = false
+    const checkPromotion = async () => {
+      try {
+        const result = await portalApi('/api/notifications/promotion', token)
+        if (!disposed && result.notification) setPromotionNotice(result.notification)
+      } catch { /* The normal portal refresh handles expired sessions. */ }
+    }
+    checkPromotion()
+    const timer = setInterval(checkPromotion, 4000)
+    return () => { disposed = true; clearInterval(timer) }
+  }, [token])
   const availableServices=officeState.map((office)=>{
     const known=services.find((service)=>service.office===office.name)
     const options=office.services.map((service)=>service.name)
     const selected=choices[office.name] || options[0] || ''
-    return { office:office.name, icon:known?.icon || '🏢', color:known?.color || '#526bd9', description:known?.description || `Services and assistance from the ${office.name} office`, wait:office.wait, options, open:office.open, requirements:office.services.find((service)=>service.name===selected)?.requirements || ['Valid school ID'] }
+    return { office:office.name, icon:known?.icon || 'office', color:known?.color || '#526bd9', description:known?.description || `Services and assistance from the ${office.name} office`, wait:office.wait, options, open:office.open, requirements:office.services.find((service)=>service.name===selected)?.requirements || ['Valid school ID'] }
   })
   const saveProfile=async(next)=>{
     const { course, ...profileDetails } = next
@@ -226,7 +252,7 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       </aside>
 
       <section className="student-main">
-        <header className="portal-header"><div><small>Student Portal</small><b>{page}</b></div><span className="live-indicator">Queue system live</span></header>
+        <header className="portal-header"><div><small>Student Portal</small><b>{page}</b></div><div className="portal-header-actions"><button type="button" className={`notification-button ${promotionNotice ? 'unread' : ''}`} aria-label="Notifications" onClick={() => promotionNotice && setPromotionOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>{promotionNotice && <i />}</button><span className="live-indicator">Queue system live</span></div></header>
         <div className="student-content">
           {notice && <div className="feature-notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
           {page === 'Dashboard' && <Dashboard profile={profile} queue={queue} history={history} go={go} returningUser={returningUser} />}
@@ -243,8 +269,13 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       {selectedService && (selectedService.ticket
         ? <FeedbackModal item={selectedService} onClose={() => setSelectedService(null)} onSubmit={submitFeedback} />
         : <RequirementsModal service={selectedService} choice={choices[selectedService.office]} onClose={() => setSelectedService(null)} onJoin={joinQueue} active={queue} />)}
+      {promotionOpen && <PromotionModal notification={promotionNotice} onClose={() => setPromotionOpen(false)} onConfirm={async () => { try { await portalApi(`/api/notifications/promotion/${promotionNotice.id}/read`, token, { method: 'PATCH' }); await onRoleChanged(); setPromotionNotice(null) } catch (error) { setNotice(error.message) } }} />}
     </main>
   )
+}
+
+function PromotionModal({ notification, onClose, onConfirm }) {
+  return <div className="student-overlay" role="dialog" aria-modal="true" aria-labelledby="promotion-title"><section className="student-modal promotion-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office"><OfficeIcon name="office" /></span><p className="float-kicker">NEW STAFF ACCESS</p><h2 id="promotion-title">{notification.title}</h2><p className="modal-copy">{notification.message} Confirm to open your staff dashboard.</p><span className="promotion-role">New role: Staff</span><button className="modal-primary" onClick={onConfirm}>Go to staff dashboard →</button></section></div>
 }
 
 function Title({ eyebrow = 'QUEUELESS STUDENT PORTAL', title, subtitle, action }) {
@@ -264,7 +295,7 @@ function Dashboard({ profile, queue, history, go, returningUser }) {
     </section>
     {queue ? <section className="active-queue-card"><div className="active-copy"><span>ACTIVE QUEUE</span><h2>{queue.ticket} · {queue.office}</h2><p>{queue.serviceName}</p><div className="inline-status"><b>{queue.status}</b><span>{queue.ahead} ahead</span><span>~{queue.estimated} min</span></div><button onClick={() => go('My Queue')}>Track my queue →</button></div><QueueOrbit ticket={queue.ticket} ahead={queue.ahead} status={queue.status} /></section>
       : <section className="welcome-card"><div><span>START HERE</span><h2>Choose an office. Get a ticket. <em>Keep moving.</em></h2><p>Check service requirements before joining, then follow your live queue position from any device.</p><button onClick={() => go('Services')}>Browse available offices →</button></div><div className="welcome-steps"><span><b>1</b>Pick a service</span><i /><span><b>2</b>Get a ticket</span><i /><span><b>3</b>Track your turn</span></div></section>}
-    <section className="quick-services"><div className="section-heading"><div><h2>Popular offices</h2><p>Quick access to frequently used school services.</p></div><button onClick={() => go('Services')}>See all</button></div><div className="mini-service-grid">{services.slice(0,4).map((service) => <button key={service.office} onClick={() => go('Services')}><span>{service.icon}</span><b>{service.office}</b><small>~{service.wait} min / student</small><em>→</em></button>)}</div></section>
+    <section className="quick-services"><div className="section-heading"><div><h2>Popular offices</h2><p>Quick access to frequently used school services.</p></div><button onClick={() => go('Services')}>See all</button></div><div className="mini-service-grid">{services.slice(0,4).map((service) => <button key={service.office} onClick={() => go('Services')}><span><OfficeIcon name={service.icon}/></span><b>{service.office}</b><small>~{service.wait} min / student</small><em>→</em></button>)}</div></section>
   </>
 }
 
@@ -277,7 +308,7 @@ function Services({ services, active, choices, setChoices, onDetails, onJoin }) 
     <Title title="Offices & services" subtitle="Choose the exact service you need and review the required documents before taking a ticket." />
     {active && <div className="active-reminder"><b>Active ticket: {active.ticket}</b><span>{active.office} · {active.serviceName}</span><small>You can only hold one active queue ticket at a time.</small></div>}
     <div className="service-grid">{services.map((service) => <article className="service-card" style={{ '--service-color': service.color }} key={service.office}>
-      <div className="service-top"><span className="office-icon service-logo">{service.icon}</span><span className="open-pill">{service.open ? "Open" : "Closed"}</span></div>
+      <div className="service-top"><span className="office-icon service-logo"><OfficeIcon name={service.icon}/></span><span className="open-pill">{service.open ? "Open" : "Closed"}</span></div>
       <h3>{service.office}</h3><p>{service.description}</p>
       <label>School service<select value={choices[service.office]} onChange={(event) => setChoices((current) => ({ ...current, [service.office]: event.target.value }))}>{service.options.map((option) => <option key={option}>{option}</option>)}</select></label>
       <div className="service-meta"><span><small>Typical service time</small><b>~{service.wait} min</b></span><span><small>Requirements</small><b>{service.requirements.length} items</b></span></div>
@@ -294,7 +325,7 @@ function MyQueue({ queue, cancelling, onCancel, go }) {
     <section className="queue-layout">
       <article className="digital-ticket">
         <div className="ticket-head"><span>DIGITAL QUEUE TICKET</span><b>LIVE</b></div>
-        <div className="ticket-office"><span>{queue.service.icon}</span><div><small>{queue.office}</small><p>{queue.serviceName}</p></div></div>
+        <div className="ticket-office"><span><OfficeIcon name={queue.service.icon}/></span><div><small>{queue.office}</small><p>{queue.serviceName}</p></div></div>
         <strong className="ticket-code">{queue.ticket}</strong>
         <div className="ticket-progress"><div><span>Requirements status</span><b>{queue.status === 'Now serving' ? 'Ongoing' : 'Ready'}</b></div><i><em style={{ width: `${progress}%` }} /></i></div>
         <div className="ticket-stats"><span><small>Students ahead</small><b>{queue.ahead}</b></span><span><small>Estimated wait</small><b>{queue.estimated} min</b></span><span><small>Queue date</small><b>{queue.visitDate || 'Today'}</b></span></div>
@@ -430,7 +461,7 @@ function SidebarIcon({ name }) {
 }
 
 function RequirementsModal({ service, choice, onClose, onJoin, active }) {
-  return <div className="student-overlay" role="dialog" aria-modal="true"><div className="student-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office">{service.icon}</span><p className="float-kicker">{service.office}</p><h2>{choice}</h2><p className="modal-copy">Prepare these before joining so your transaction is smoother when your number is called.</p><div className="requirement-list">{service.requirements.map((item) => <p key={item}><i>✓</i><span>{item}</span></p>)}</div><button className="modal-primary" disabled={Boolean(active) || !service.open} onClick={() => onJoin(service)}>{active ? 'You already have an active ticket' : 'Requirements ready — get ticket'}</button></div></div>
+  return <div className="student-overlay" role="dialog" aria-modal="true"><div className="student-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office"><OfficeIcon name={service.icon}/></span><p className="float-kicker">{service.office}</p><h2>{choice}</h2><p className="modal-copy">Prepare these before joining so your transaction is smoother when your number is called.</p><div className="requirement-list">{service.requirements.map((item) => <p key={item}><i>✓</i><span>{item}</span></p>)}</div><button className="modal-primary" disabled={Boolean(active) || !service.open} onClick={() => onJoin(service)}>{active ? 'You already have an active ticket' : 'Requirements ready — get ticket'}</button></div></div>
 }
 
 function FeedbackModal({ item, onClose, onSubmit }) {

@@ -4,6 +4,11 @@ export async function sendEmailOtp(email, code, purpose) {
   const apiKey = process.env.RESEND_API_KEY
   const from = process.env.EMAIL_FROM
 
+  if (process.env.EMAIL_TRANSPORT === 'console') {
+    console.info(`[LOCAL EMAIL] ${purpose} code for ${email}: ${code}`)
+    return { transport: 'console' }
+  }
+
   if (!apiKey || !from) {
     throw Object.assign(new Error('Email delivery is not configured.'), { status: 503 })
   }
@@ -32,4 +37,6 @@ export async function sendEmailOtp(email, code, purpose) {
     console.error('RESEND DELIVERY ERROR:', details)
     throw Object.assign(new Error('We could not send the code. Please try again later.'), { status: 502 })
   }
+
+  return { transport: 'resend' }
 }

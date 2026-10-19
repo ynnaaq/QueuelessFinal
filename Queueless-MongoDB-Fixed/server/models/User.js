@@ -3,11 +3,74 @@ import mongoose from 'mongoose'
 
 const userSchema = new mongoose.Schema(
   {
+    // Supabase authentication reference
+    supabaseUserId: {
+  type: String,
+  unique: true,
+  sparse: true,
+  default: undefined,
+  trim: true
+},
+passwordHash: {
+  type: String,
+  required: true
+},
+
+    // Local email verification and password-recovery state. These fields are
+    // intentionally excluded from ordinary queries and API responses.
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerificationCodeHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    emailVerificationExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    emailVerificationAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+
+    resetPasswordTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+
+    // User profile
     name: {
       type: String,
       required: true,
       trim: true
     },
+
+    course: {
+  type: String,
+  default: '',
+  trim: true
+},
 
     email: {
       type: String,
@@ -17,89 +80,43 @@ const userSchema = new mongoose.Schema(
       trim: true
     },
 
-    passwordHash: {
-      type: String,
-      required: true
-    },
-
-    // Email OTP verification
-    emailVerified: {
-      type: Boolean,
-      default: false
-    },
-
-    emailVerificationCodeHash: {
-      type: String,
-      default: null,
-      select: false
-    },
-
-    emailVerificationExpiresAt: {
-      type: Date,
-      default: null,
-      select: false
-    },
-
-    emailVerificationAttempts: {
-      type: Number,
-      default: 0,
-      select: false
-    },
-
-    emailVerificationLastSentAt: {
-      type: Date,
-      default: null,
-      select: false
-    },
-
     // Privacy consent
     privacyConsentAt: {
       type: Date,
       default: null
     },
 
-    // Password reset
-    resetPasswordTokenHash: {
-      type: String,
-      default: null,
-      select: false
-    },
-
-    resetPasswordExpiresAt: {
-      type: Date,
-      default: null,
-      select: false
-    },
-
-    resetPasswordAttempts: {
-      type: Number,
-      default: 0,
-      select: false
-    },
-
     // Role-based access control
     role: {
       type: String,
       enum: ['student', 'staff', 'admin'],
-      required: true
+      required: true,
+      default: 'student'
     },
 
     status: {
       type: String,
-      enum: ['Active', 'Inactive', 'Suspended', 'Pending'],
+      enum: [
+        'Active',
+        'Inactive',
+        'Suspended',
+        'Pending'
+      ],
       default: 'Active'
     },
 
     deletedAt: {
-    type: Date,
-    default: null
-    },
-    deletedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
+      type: Date,
+      default: null
     },
 
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+
+    // Student information
     accountId: {
       type: String,
       default: '',
@@ -107,6 +124,12 @@ const userSchema = new mongoose.Schema(
     },
 
     department: {
+      type: String,
+      default: '',
+      trim: true
+    },
+
+    course: {
       type: String,
       default: '',
       trim: true
@@ -124,29 +147,30 @@ const userSchema = new mongoose.Schema(
       trim: true
     },
 
+    // Profile picture
     avatar: {
       type: String,
       default: ''
     },
 
+    // Staff assignment
     office: {
       type: String,
       default: '',
       trim: true
     },
 
+    // Staff schedules
     schedule: [
       {
         day: {
           type: String,
           trim: true
         },
-
         start: {
           type: String,
           trim: true
         },
-
         end: {
           type: String,
           trim: true
@@ -159,7 +183,7 @@ const userSchema = new mongoose.Schema(
   }
 )
 
-// Keep account IDs unique when provided
+// Unique account IDs when provided
 userSchema.index(
   { accountId: 1 },
   {
