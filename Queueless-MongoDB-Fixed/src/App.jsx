@@ -5,6 +5,7 @@ import {
   clearStoredSession,
   getCurrentUser,
   getStoredSession,
+  portalApi,
   storeSession,
 } from './services/auth.js'
 import './App.css'
@@ -66,5 +67,15 @@ export default function App() {
     setSession(next)
   }
 
-  return <AppRoutes session={session} checkingSession={checkingSession} onLogin={onLogin} onLogout={onLogout} onRoleChanged={onRoleChanged} />
+  const onSwitchRole = async (role) => {
+    if (!session?.token) throw new Error('Your session has expired. Please sign in again.')
+    const { user } = await portalApi('/api/auth/switch-role', session.token, {
+      method: 'POST', body: JSON.stringify({ role }),
+    })
+    const next = { ...session, user }
+    storeSession(next)
+    setSession(next)
+  }
+
+  return <AppRoutes session={session} checkingSession={checkingSession} onLogin={onLogin} onLogout={onLogout} onRoleChanged={onRoleChanged} onSwitchRole={onSwitchRole} />
 }

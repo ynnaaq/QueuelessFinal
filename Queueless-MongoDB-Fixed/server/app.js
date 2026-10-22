@@ -1,14 +1,15 @@
 import crypto from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
-import { createClient } from '@supabase/supabase-js'
 import User from './models/User.js'
 import Office from './models/Office.js'
 import Ticket from './models/Ticket.js'
 import Session from './models/Session.js'
 import Feedback from './models/Feedback.js'
 import Schedule from './models/Schedule.js'
+import PromotionInvitation from './models/PromotionInvitation.js'
 import { sendEmailOtp } from './emailService.js'
 
 
@@ -375,6 +376,7 @@ const publicUser = (user) => {
     ...raw,
     id,
     _id: id,
+    roles: Array.from(new Set([...(raw.roles || []), raw.role])),
   }
 }
 
@@ -974,18 +976,24 @@ export function createApp({
   const app =
     express()
 
-  // The frontend signs users in through Supabase. Verify those bearer tokens
-  // with Supabase before mapping them to the matching local application user.
-  // Keeping this optional preserves the original MongoDB-session flow for
-  // installations that have not configured Supabase.
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  const supabase = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-    : null
-
+  // Use the same public project credentials as the browser when both files
+  // are present. This keeps the token issuer and token validator aligned.
+  // SUPABASE_* remains available for deployments that do not use Vite.
+  const supabaseUrl =
+    process.env.VITE_SUPABASE_URL?.trim() ||
+    process.env.SUPABASE_URL?.trim()
+  const supabaseKey =
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.SUPABASE_PUBLISHABLE_KEY?.trim()
+  const supabase =
+    supabaseUrl && supabaseKey
+      ? createClient(supabaseUrl, supabaseKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        })
+      : null
 
   app.set('trust proxy', 1)
 
@@ -1202,44 +1210,6 @@ export function createApp({
                 )
             }
 
-            // Supabase access tokens are JWTs, not records in the local
-            // Session collection. Ask Supabase to validate the token, then
-            // use the verified email to find the corresponding app account.
-            if (!user && supabase) {
-              const { data, error } = await supabase.auth.getUser(token)
-
-              if (!error && data.user?.email) {
-                user = await User.findOne({
-                  email: data.user.email.toLowerCase(),
-                  status: 'Active',
-                })
-
-                // Students authenticate through Supabase, while queue records
-                // are stored in MongoDB. Provision the matching local account
-                // on the first verified request so their Supabase session can
-                // use the protected student endpoints.
-                if (!user && data.user.user_metadata?.role === 'student') {
-                  const metadata = data.user.user_metadata || {}
-                  const accountId = String(metadata.student_id || '').trim()
-                  const existingAccountId = accountId
-                    ? await User.exists({ accountId })
-                    : null
-
-                  user = await User.create({
-                    name: String(metadata.full_name || data.user.email).trim(),
-                    email: data.user.email.toLowerCase(),
-                    passwordHash: hash(crypto.randomBytes(32).toString('base64url')),
-                    role: 'student',
-                    status: 'Active',
-                    accountId: existingAccountId ? '' : accountId,
-                    department: String(metadata.course || '').trim(),
-                    yearLevel: String(metadata.year_level || '').trim(),
-                    semester: String(metadata.semester || '').trim(),
-                    emailVerified: Boolean(data.user.email_confirmed_at),
-                  })
-                }
-              }
-            }
           }
 
 
@@ -1310,6 +1280,9 @@ export function createApp({
       )
     }
 
+  const grantedRoles = (user) =>
+    Array.from(new Set([...(user.roles || []), user.role]))
+
 
   route(
     'get',
@@ -1323,6 +1296,69 @@ export function createApp({
     })
   )
 
+
+  // Supabase is the identity provider. Only a verified Supabase bearer token
+  // may link or create a MongoDB profile and receive a Queueless session.
+  route(
+    'post',
+    '/api/auth/supabase-session',
+    null,
+    async ({ token }) => {
+      if (!token) fail('Missing Supabase access token.', 401)
+      if (!supabase) fail('Supabase backend configuration is missing.', 503)
+
+      const { data, error } = await supabase.auth.getUser(token)
+      if (error || !data?.user) fail('Invalid Supabase access token.', 401)
+      const identity = data.user
+      if (!identity.email_confirmed_at) fail('Verify your email before signing in.', 403)
+      const email = emailValue(identity.email)
+      const uid = identity.id
+      let user = await User.findOne({ supabaseUserId: uid })
+      if (!user) {
+        user = await User.findOne({ email })
+        if (user?.supabaseUserId && user.supabaseUserId !== uid) {
+          fail('This email is already linked to another identity.', 409)
+        }
+        if (user) {
+          // Link existing local users without modifying their admin/staff role.
+          user.supabaseUserId = uid
+          user.emailVerified = true
+          await user.save()
+        } else {
+          const profile = identity.user_metadata || {}
+          const accountId = String(profile.account_id || '').trim()
+          if (!accountId || !/^03-\d{4}-\d{5,6}$/.test(accountId)) {
+            fail('Your Supabase account has no valid student ID. Contact an administrator.', 422)
+          }
+          if (await User.exists({ accountId })) {
+            fail('Student ID is linked to another account. Contact an administrator.', 409)
+          }
+          try {
+            user = await User.create({
+              supabaseUserId: uid,
+              email,
+              name: nameValue(profile.full_name || ''),
+              accountId,
+              department: String(profile.department || '').slice(0, 100),
+              yearLevel: String(profile.year_level || '').slice(0, 50),
+              semester: String(profile.semester || '').slice(0, 30),
+              role: 'student',
+              status: 'Active',
+              emailVerified: true,
+              privacyConsentAt: new Date(),
+              // Legacy required field only; NEVER used to authenticate Supabase users.
+              passwordHash: hash(crypto.randomBytes(32).toString('hex')),
+            })
+          } catch (err) {
+            if (err?.code === 11000) fail('Account already exists. Retry sign in or contact support.', 409)
+            throw err
+          }
+        }
+      }
+      if (user.status !== 'Active') fail('Account is not active. Contact an administrator.', 403)
+      return createSession(user)
+    }
+  )
 
   route(
     'post',
@@ -1577,6 +1613,10 @@ if (body.privacyConsent !== true) {
         )
       }
 
+      if (user.supabaseUserId) {
+        fail('Use Supabase sign-in for this account.', 403)
+      }
+
       if (!user.emailVerified) {
         fail('Verify your email address before signing in.', 403)
       }
@@ -1739,6 +1779,75 @@ if (body.privacyConsent !== true) {
       user:
         publicUser(user),
     })
+  )
+
+  route(
+    'post',
+    '/api/auth/switch-role',
+    [],
+    async ({ body, user, session }) => {
+      const role = text(body.role, 'Role', 20)
+      if (!grantedRoles(user).includes(role)) {
+        fail('You do not have access to that dashboard.', 403)
+      }
+      user.role = role
+      session.activeRole = role
+      await Promise.all([user.save(), session.save()])
+      return { user: publicUser(user) }
+    }
+  )
+
+  route(
+    'get',
+    '/api/notifications/promotion',
+    ['student'],
+    async ({ user }) => {
+      const invitation = await PromotionInvitation.findOne({
+        studentId: user._id,
+        status: 'pending',
+      }).sort({ createdAt: -1 })
+      if (!invitation) return { notification: null }
+      return {
+        notification: {
+          id: String(invitation._id),
+          title: 'Staff promotion invitation',
+          message: `You have been invited to join the ${invitation.office} office as ${invitation.staffRole}.`,
+          office: invitation.office,
+          staffRole: invitation.staffRole,
+          schedule: invitation.schedule,
+          createdAt: invitation.createdAt,
+        },
+      }
+    }
+  )
+
+  route(
+    'post',
+    '/api/notifications/promotion/:id/respond',
+    ['student'],
+    async ({ req, body, user }) => {
+      if (!mongoose.isValidObjectId(req.params.id)) fail('Promotion invitation not found.', 404)
+      const action = text(body.action, 'Promotion response', 10)
+      if (!['accept', 'decline'].includes(action)) fail('Choose accept or decline.')
+      const invitation = await PromotionInvitation.findOne({
+        _id: req.params.id,
+        studentId: user._id,
+        status: 'pending',
+      })
+      if (!invitation) fail('Promotion invitation not found or already answered.', 404)
+
+      invitation.status = action === 'accept' ? 'accepted' : 'declined'
+      invitation.respondedAt = new Date()
+      if (action === 'accept') {
+        user.roles = Array.from(new Set([...grantedRoles(user), 'student', 'staff']))
+        user.office = invitation.office
+        user.staffRole = invitation.staffRole
+        user.schedule = invitation.schedule
+        await user.save()
+      }
+      await invitation.save()
+      return { invitation: { id: String(invitation._id), status: invitation.status }, user: publicUser(user) }
+    }
   )
 
 
@@ -3457,6 +3566,62 @@ if (body.privacyConsent !== true) {
 
   route(
     'post',
+    '/api/admin/staff/invitations',
+    ['admin'],
+    async ({ body, user: admin }) => {
+      const email = emailValue(body.email)
+      const student = await User.findOne({ email, status: 'Active' })
+      if (!student || !grantedRoles(student).includes('student')) {
+        fail('A registered active student with this email was not found.', 404)
+      }
+      if (grantedRoles(student).includes('staff')) {
+        fail('This student already has staff access.', 409)
+      }
+      if (await PromotionInvitation.exists({ studentId: student._id, status: 'pending' })) {
+        fail('This student already has a pending promotion invitation.', 409)
+      }
+      const office = await findOffice(body.office)
+      const invitation = await PromotionInvitation.create({
+        studentId: student._id,
+        invitedBy: admin._id,
+        office: office.name,
+        staffRole: text(body.staffRole || 'Service staff', 'Staff role', 80),
+        schedule: scheduleValue(body.schedule ?? []),
+      })
+      return {
+        status: 201,
+        data: {
+          invitation: {
+            id: String(invitation._id),
+            status: invitation.status,
+            studentEmail: student.email,
+            office: invitation.office,
+            staffRole: invitation.staffRole,
+          },
+          message: 'Promotion invitation sent to the student.',
+        },
+      }
+    }
+  )
+
+  route(
+    'get',
+    '/api/admin/staff/invitations',
+    ['admin'],
+    async () => {
+      const invitations = await PromotionInvitation.find().sort({ createdAt: -1 }).populate('studentId', 'name email')
+      return {
+        invitations: invitations.map((item) => ({
+          id: String(item._id), status: item.status, office: item.office, staffRole: item.staffRole,
+          student: item.studentId ? { name: item.studentId.name, email: item.studentId.email } : null,
+          createdAt: item.createdAt, respondedAt: item.respondedAt,
+        })),
+      }
+    }
+  )
+
+  route(
+    'post',
     '/api/admin/staff',
     [
       'admin',
@@ -3488,6 +3653,11 @@ if (body.privacyConsent !== true) {
           body.office
         )
 
+      const schedule =
+        scheduleValue(
+          body.schedule ?? []
+        )
+
 
       const user =
         await User.create({
@@ -3509,6 +3679,8 @@ if (body.privacyConsent !== true) {
 
           office:
             office.name,
+
+          schedule,
         })
 
 

@@ -3,18 +3,10 @@ import mongoose from 'mongoose'
 
 const userSchema = new mongoose.Schema(
   {
-    // Supabase authentication reference
-    supabaseUserId: {
-  type: String,
-  unique: true,
-  sparse: true,
-  default: undefined,
-  trim: true
-},
-passwordHash: {
-  type: String,
-  required: true
-},
+    passwordHash: {
+      type: String,
+      required: true,
+    },
 
     // Local email verification and password-recovery state. These fields are
     // intentionally excluded from ordinary queries and API responses.
@@ -59,18 +51,19 @@ passwordHash: {
       select: false,
     },
 
+    supabaseUserId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: undefined,
+    },
+
     // User profile
     name: {
       type: String,
       required: true,
       trim: true
     },
-
-    course: {
-  type: String,
-  default: '',
-  trim: true
-},
 
     email: {
       type: String,
@@ -92,6 +85,19 @@ passwordHash: {
       enum: ['student', 'staff', 'admin'],
       required: true,
       default: 'student'
+    },
+
+    // Roles granted to this one account. `role` remains the currently
+    // selected dashboard role for compatibility with existing routes.
+    roles: {
+      type: [{ type: String, enum: ['student', 'staff', 'admin'] }],
+      default: undefined,
+    },
+
+    staffRole: {
+      type: String,
+      default: '',
+      trim: true,
     },
 
     status: {

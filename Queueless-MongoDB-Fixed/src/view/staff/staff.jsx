@@ -12,7 +12,7 @@ const serviceData = {
 
 const initials = (name = '') => name.split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0,2).toUpperCase() || 'ST'
 
-export default function Staff({ onLogout, user, token }) {
+export default function Staff({ onLogout, user, token, onSwitchRole }) {
   const [page, setPage] = useState('Queue')
   const [activeService, setActiveService] = useState(user?.office || 'Registrar')
   const [queues, setQueues] = useState({})
@@ -90,7 +90,8 @@ export default function Staff({ onLogout, user, token }) {
       <aside className="staff-sidebar">
         <div className="staff-brand"><img className="staff-mark" src="/campus-queue-logo.png" alt="" /><div><b>Queueless</b><small>Staff workspace</small></div></div>
         <nav>{tabSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{tabs.filter(([,label]) => labels.includes(label)).map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => setPage(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</div>)}</nav>
-        <div className="staff-account"><span>{initials(user?.name || 'Ana Reyes')}</span><p><b>{user?.name || 'Ana Reyes'}</b><small>Service staff</small></p><button onClick={onLogout}>⇥</button></div>
+        {user.roles?.includes('student') && <button type="button" className="staff-role-switch" onClick={() => onSwitchRole('student')}>Switch to Student</button>}
+        <div className="staff-account"><span>{initials(user?.name || 'Ana Reyes')}</span><p><b>{user?.name || 'Ana Reyes'}</b><small>{user?.staffRole || 'Service staff'}</small></p><button onClick={onLogout}>⇥</button></div>
       </aside>
 
       <section className="staff-main">

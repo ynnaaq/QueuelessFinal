@@ -21,6 +21,13 @@ const sessionSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+
+  // The selected dashboard for accounts that have more than one role.
+  activeRole: {
+    type: String,
+    enum: ['student', 'staff', 'admin'],
+    default: null,
+  },
 }, {
   timestamps: true,
 })

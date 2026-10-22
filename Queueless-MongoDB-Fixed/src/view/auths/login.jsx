@@ -1,4 +1,3 @@
-import { supabase } from '../../lib/supabase.js'
 import { useEffect, useState } from 'react'
 import {
   signUpWithSupabase,
@@ -313,46 +312,16 @@ export default function Login({ onLogin }) {
   const [sendingReset, setSendingReset] = useState(false)
   const [updatingPassword, setUpdatingPassword] = useState(false)
 
-  // Supabase redirects back to this page after the user opens the
-  // password-recovery email. The query marker helps us recover the UI
-  // even when the auth event is processed before React mounts.
+  // Password recovery is completed through the MongoDB-backed API. Keep a
+  // recovery-link query marker for backwards-compatible links, without
+  // requiring a separate Supabase browser session.
   useEffect(() => {
-    let active = true
     const recoveryReturn =
       new URLSearchParams(window.location.search).get('auth') === 'recovery'
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event) => {
-        if (!active) return
-        if (event === 'PASSWORD_RECOVERY') {
-          setPage('reset')
-          setMessage('Create your new Queueless password below.')
-        }
-      }
-    )
-
     if (recoveryReturn) {
-      supabase.auth.getSession()
-        .then(({ data, error }) => {
-          if (!active) return
-          if (error || !data.session) {
-            setPage('forgot')
-            setMessage('This password recovery link is invalid or expired. Request a new one.')
-            return
-          }
-          setPage('reset')
-          setMessage('Create your new Queueless password below.')
-        })
-        .catch(() => {
-          if (!active) return
-          setPage('forgot')
-          setMessage('We could not validate your password recovery link. Request a new one.')
-        })
-    }
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
+      setPage('forgot')
+      setMessage('Enter your school email to receive a six-digit password reset code.')
     }
   }, [])
 
@@ -530,7 +499,7 @@ export default function Login({ onLogin }) {
 
   // ======================================================
   // ======================================================
-  // SUPABASE PASSWORD RECOVERY
+  // PASSWORD RECOVERY
   // ======================================================
 
   const requestReset = async (event) => {

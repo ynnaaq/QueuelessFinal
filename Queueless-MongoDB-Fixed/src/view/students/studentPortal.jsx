@@ -69,7 +69,7 @@ const validPassword = (password) => password.length >= 8 && !/\s/.test(password)
 const passwordRule = 'Use 8+ characters with uppercase, lowercase, number, and ! @ # $ % ^ & *; no spaces.'
 const campusDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())
 
-export default function StudentPortal({ onLogout, user, token, page = 'Dashboard', onNavigate, onRoleChanged }) {
+export default function StudentPortal({ onLogout, user, token, page = 'Dashboard', onNavigate, onRoleChanged, onSwitchRole }) {
   const [officeState, setOfficeState] = useState([])
   const [queue, setQueue] = useState(null)
   const [cancelling, setCancelling] = useState(false)
@@ -248,6 +248,7 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       <aside className="student-sidebar">
         <div className="student-logo"><img className="student-mark" src="/campus-queue-logo.png" alt="" /><span>Queueless<small>Student portal</small></span></div>
         <nav>{navSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{nav.filter(([,label]) => labels.includes(label)).map(([icon, label]) => <button type="button" title={label} aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => go(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'My Queue' && queue && <em>1</em>}</button>)}</div>)}</nav>
+        {user.roles?.includes('staff') && <button type="button" className="student-role-switch" onClick={() => onSwitchRole('staff')}>Switch to Staff</button>}
         <div className="account"><span className="account-avatar">{profile.avatar ? <img src={profile.avatar} alt="" /> : initials(profile.name)}</span><p><b>{profile.name}</b><small>{profile.id}</small></p><button onClick={onLogout} title="Sign out">⇥</button></div>
       </aside>
 
@@ -269,12 +270,16 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       {selectedService && (selectedService.ticket
         ? <FeedbackModal item={selectedService} onClose={() => setSelectedService(null)} onSubmit={submitFeedback} />
         : <RequirementsModal service={selectedService} choice={choices[selectedService.office]} onClose={() => setSelectedService(null)} onJoin={joinQueue} active={queue} />)}
-      {promotionOpen && <PromotionModal notification={promotionNotice} onClose={() => setPromotionOpen(false)} onConfirm={async () => { try { await portalApi(`/api/notifications/promotion/${promotionNotice.id}/read`, token, { method: 'PATCH' }); await onRoleChanged(); setPromotionNotice(null) } catch (error) { setNotice(error.message) } }} />}
+      {promotionOpen && <PromotionModal notification={promotionNotice} onClose={() => setPromotionOpen(false)} onRespond={async (action) => { try { await portalApi(`/api/notifications/promotion/${promotionNotice.id}/respond`, token, { method: 'POST', body: JSON.stringify({ action }) }); await onRoleChanged(); setPromotionNotice(null); setPromotionOpen(false); if (action === 'accept') await onSwitchRole('staff') } catch (error) { setNotice(error.message) } }} />}
     </main>
   )
 }
 
-function PromotionModal({ notification, onClose, onConfirm }) {
+function PromotionModal({ notification, onClose, onRespond }) {
+  return <div className="student-overlay" role="dialog" aria-modal="true" aria-labelledby="promotion-title"><section className="student-modal promotion-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office"><OfficeIcon name="office" /></span><p className="float-kicker">STAFF PROMOTION</p><h2 id="promotion-title">{notification.title}</h2><p className="modal-copy">{notification.message}</p><span className="promotion-role">{notification.staffRole} · {notification.office}</span><div className="promotion-actions"><button type="button" className="modal-secondary" onClick={() => onRespond('decline')}>Decline</button><button type="button" className="modal-primary" onClick={() => onRespond('accept')}>Accept promotion</button></div></section></div>
+}
+
+function LegacyPromotionModal({ notification, onClose, onConfirm }) {
   return <div className="student-overlay" role="dialog" aria-modal="true" aria-labelledby="promotion-title"><section className="student-modal promotion-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office"><OfficeIcon name="office" /></span><p className="float-kicker">NEW STAFF ACCESS</p><h2 id="promotion-title">{notification.title}</h2><p className="modal-copy">{notification.message} Confirm to open your staff dashboard.</p><span className="promotion-role">New role: Staff</span><button className="modal-primary" onClick={onConfirm}>Go to staff dashboard →</button></section></div>
 }
 

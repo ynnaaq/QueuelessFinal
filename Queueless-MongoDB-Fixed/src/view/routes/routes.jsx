@@ -39,7 +39,7 @@ const subscribe = (listener) => {
   return () => window.removeEventListener('popstate', listener)
 }
 
-export default function AppRoutes({ session, checkingSession, onLogin, onLogout, onRoleChanged }) {
+export default function AppRoutes({ session, checkingSession, onLogin, onLogout, onRoleChanged, onSwitchRole }) {
   const pathname = useSyncExternalStore(subscribe, getPathname)
   const role = session?.user?.role
   const route = session?.token && Object.hasOwn(roleRoutes, role) ? roleRoutes[role] : null
@@ -74,5 +74,5 @@ export default function AppRoutes({ session, checkingSession, onLogin, onLogout,
 
   const Dashboard = route.Component
   const defaultPage = Object.keys(route.pages ?? {})[0] ?? 'Overview'
-  return <Dashboard onLogout={onLogout} user={session.user} token={session.token} page={page ?? defaultPage} onNavigate={navigatePage} onRoleChanged={onRoleChanged} />
+  return <Dashboard onLogout={onLogout} user={session.user} token={session.token} page={page ?? defaultPage} onNavigate={navigatePage} onRoleChanged={onRoleChanged} onSwitchRole={onSwitchRole} />
 }

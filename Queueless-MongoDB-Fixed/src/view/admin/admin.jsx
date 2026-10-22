@@ -136,7 +136,7 @@ const toggleStaff = (id) => {
   const toggleOffice=(id)=>mutate('/api/offices/'+id,'PATCH',{open:!offices.find(o=>o.id===id).open})
   const deleteOffice=async(office)=>{if(!window.confirm(`Delete ${office.name}? This removes its services and cannot be undone.`))return;try{await portalApi('/api/offices/'+office.id,token,{method:'DELETE'});await refresh();recordAudit('Deleted office',office.name);notify('Office deleted.')}catch(error){notify(error.message)}}
   const addRequirement=(id,serviceIndex,requirement)=>mutate('/api/offices/'+id+'/requirements','POST',{serviceIndex,requirement})
-  const addStaff=async(entry)=>{try{const result=await portalApi('/api/admin/staff/promote',token,{method:'POST',body:JSON.stringify(entry)});await refresh();setAddStaffOpen(false);notify(result.message||'Student assigned as staff.')}catch(error){notify(error.message)}}
+  const addStaff=async(entry)=>{try{const result=await portalApi('/api/admin/staff/invitations',token,{method:'POST',body:JSON.stringify(entry)});await refresh();setAddStaffOpen(false);notify(result.message||'Promotion invitation sent.')}catch(error){notify(error.message)}}
   const addOffice=async(entry)=>{if(await mutate('/api/offices','POST',entry))setAddOfficeOpen(false)}
   const saveStaffSchedule=async(schedule)=>{if(await mutate('/api/admin/staff/'+scheduleMember.id+'/schedule','PATCH',{schedule}))setScheduleMember(null)}
   useEffect(()=>{
@@ -332,13 +332,62 @@ function Profile({ user, token, onNameSaved }){
   const submit=async(event)=>{event.preventDefault();if(form.password!==form.confirmPassword)return setNotice('Passwords do not match.');try{await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify(form)});onNameSaved(form.name.trim());setNotice('Profile saved successfully.');setForm(current=>({...current,password:'',confirmPassword:''}))}catch(error){setNotice(error.message)}}
   return <><PageTitle title="Admin profile" subtitle="Update your administrator account details."/><form className="admin-profile-editor" onSubmit={submit}><div className="admin-profile-heading"><span>{initials(form.name)}</span><div><h2>{form.name}</h2><p>Administrator account</p></div></div><div className="admin-profile-fields"><label>Full name<input name="name" value={form.name} onChange={update} required /></label><label>Email address<input name="email" type="email" value={form.email} onChange={update} required /></label><label className="admin-password-field">Password<span><input name="password" type={passwordVisible ? 'text' : 'password'} value={form.password} onChange={update} placeholder="New password" minLength="8" /><button type="button" onClick={()=>setPasswordVisible((visible)=>!visible)} aria-label={passwordVisible ? 'Hide password' : 'Show password'} title={passwordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={passwordVisible}/></button></span></label><label className="admin-password-field">Confirm password<span><input name="confirmPassword" type={confirmPasswordVisible ? 'text' : 'password'} value={form.confirmPassword} onChange={update} placeholder="Repeat password" minLength="8" /><button type="button" onClick={()=>setConfirmPasswordVisible((visible)=>!visible)} aria-label={confirmPasswordVisible ? 'Hide password' : 'Show password'} title={confirmPasswordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={confirmPasswordVisible}/></button></span></label></div><div className="admin-profile-footer"><p className={notice.includes('match')?'profile-error':''}>{notice||'Leave passwords blank to keep your current password.'}</p><button className="admin-primary">Save profile</button></div></form></>}
 
-function AddStaffModal({ offices,onClose,onAdd }){
+function AddStaffModal({ offices, onClose, onAdd }) {
+  const [form, setForm] = useState({
+    email: '',
+    office: offices[0]?.name || 'Registrar',
+    staffRole: 'Service staff',
+    schedule: [{ day: 'Monday', start: '08:00', end: '17:00' }],
+  })
+  const updateShift = (index, field, value) => setForm((current) => ({
+    ...current,
+    schedule: current.schedule.map((shift, shiftIndex) =>
+      shiftIndex === index ? { ...shift, [field]: value } : shift
+    ),
+  }))
+  const addShift = () => setForm((current) => ({
+    ...current,
+    schedule: [...current.schedule, { day: 'Monday', start: '08:00', end: '17:00' }],
+  }))
+  const removeShift = (index) => setForm((current) => ({
+    ...current,
+    schedule: current.schedule.filter((_, shiftIndex) => shiftIndex !== index),
+  }))
+
+  return <div className="admin-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="add-staff-title">
+    <form className="admin-modal promote-student-modal" onSubmit={(event) => { event.preventDefault(); onAdd(form) }}>
+      <button type="button" className="admin-modal-close" onClick={onClose} aria-label="Close">×</button>
+      <span className="float-kicker">STAFF ACCOUNT</span>
+      <h2 id="add-staff-title">Promote student to staff</h2>
+      <p>Enter a registered student email, assign an office, and type their weekly work hours.</p>
+      <label>Student email<input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Enter student email" required autoFocus /></label>
+      <label>Assigned office<select value={form.office} onChange={(event) => setForm((current) => ({ ...current, office: event.target.value }))}>{offices.map((office) => <option key={office.id} value={office.name}>{office.name}</option>)}</select></label>
+      <label>Staff role<select value={form.staffRole} onChange={(event) => setForm((current) => ({ ...current, staffRole: event.target.value }))}><option>Service staff</option><option>Queue officer</option><option>Office assistant</option></select></label>
+      <fieldset className="promotion-schedule">
+        <legend>Weekly work schedule</legend>
+        <p>Set the days and hours this staff member is available.</p>
+        <div className="promotion-schedule-list">
+          {form.schedule.map((shift, index) => <div className="promotion-schedule-row" key={`${shift.day}-${index}`}>
+            <label>Day<select aria-label={`Shift ${index + 1} day`} value={shift.day} onChange={(event) => updateShift(index, 'day', event.target.value)}>{scheduleDays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
+            <label>From<input aria-label={`Shift ${index + 1} start time`} type="time" value={shift.start} onChange={(event) => updateShift(index, 'start', event.target.value)} required /></label>
+            <label>To<input aria-label={`Shift ${index + 1} end time`} type="time" value={shift.end} onChange={(event) => updateShift(index, 'end', event.target.value)} required /></label>
+            <button type="button" className="promotion-shift-remove" onClick={() => removeShift(index)} disabled={form.schedule.length === 1} aria-label={`Remove ${shift.day} shift`}>×</button>
+          </div>)}
+        </div>
+        <button type="button" className="promotion-shift-add" onClick={addShift}>+ Add another shift</button>
+      </fieldset>
+      <button className="admin-primary modal-submit">Promote Student</button>
+    </form>
+  </div>
+}
+
+function LegacyAddStaffModal({ offices,onClose,onAdd }){
   const [form, setForm] = useState({
     email: '',
     office: offices[0]?.name || 'Registrar',
     shift: '08:00-17:00'
   })
-  return <div className="admin-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="add-staff-title"><form className="admin-modal promote-student-modal" onSubmit={(event)=>{event.preventDefault();onAdd(form)}}><button type="button" className="admin-modal-close" onClick={onClose} aria-label="Close">×</button><span className="float-kicker">STAFF ACCOUNT</span><h2 id="add-staff-title">Promote student to staff</h2><p>Enter a registered student email, assign their office, and set their initial work schedule.</p><label>Student email<input type="email" value={form.email} onChange={(event)=>setForm((current)=>({...current,email:event.target.value}))} placeholder="student@school.edu" required autoFocus /></label><label>Assigned office<select value={form.office} onChange={(event)=>setForm((current)=>({...current,office:event.target.value}))}>{offices.map((office)=><option key={office.id} value={office.name}>{office.name}</option>)}</select></label><fieldset className="promotion-shifts"><legend>Initial work shift</legend><label><input type="radio" name="staff-shift" checked={form.shift==='08:00-17:00'} onChange={()=>setForm((current)=>({...current,shift:'08:00-17:00'}))}/>8:00 AM – 5:00 PM</label><label><input type="radio" name="staff-shift" checked={form.shift==='09:00-16:00'} onChange={()=>setForm((current)=>({...current,shift:'09:00-16:00'}))}/>9:00 AM – 4:00 PM</label></fieldset><button className="admin-primary modal-submit">Promote Student</button></form></div>
+  return <div className="admin-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="add-staff-title"><form className="admin-modal promote-student-modal" onSubmit={(event)=>{event.preventDefault();onAdd(form)}}><button type="button" className="admin-modal-close" onClick={onClose} aria-label="Close">×</button><span className="float-kicker">STAFF ACCOUNT</span><h2 id="add-staff-title">Promote student to staff</h2><p>Enter a registered student email, assign their office, and set their initial work schedule.</p><label>Student email<input type="email" value={form.email} onChange={(event)=>setForm((current)=>({...current,email:event.target.value}))} placeholder="Enter student email" required autoFocus /></label><label>Assigned office<select value={form.office} onChange={(event)=>setForm((current)=>({...current,office:event.target.value}))}>{offices.map((office)=><option key={office.id} value={office.name}>{office.name}</option>)}</select></label><fieldset className="promotion-shifts"><legend>Initial work shift</legend><label><input type="radio" name="staff-shift" checked={form.shift==='08:00-17:00'} onChange={()=>setForm((current)=>({...current,shift:'08:00-17:00'}))}/>8:00 AM – 5:00 PM</label><label><input type="radio" name="staff-shift" checked={form.shift==='09:00-16:00'} onChange={()=>setForm((current)=>({...current,shift:'09:00-16:00'}))}/>9:00 AM – 4:00 PM</label></fieldset><button className="admin-primary modal-submit">Promote Student</button></form></div>
 }
 
 function AddOfficeModal({ onClose, onAdd }) {

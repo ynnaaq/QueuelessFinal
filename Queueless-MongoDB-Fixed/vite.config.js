@@ -5,7 +5,10 @@ import { defineConfig, loadEnv } from 'vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiPort = env.PORT || '3001'
+  const apiTarget =
+    env.VITE_API_PROXY_TARGET ||
+    env.VITE_API_URL ||
+    `http://localhost:${env.PORT || '3001'}`
 
   return {
     plugins: [react()],
@@ -13,7 +16,7 @@ export default defineConfig(({ mode }) => {
 
       proxy: {
         '/api': {
-          target: `http://localhost:${apiPort}`,
+          target: apiTarget,
           changeOrigin: true,
         },
       },
