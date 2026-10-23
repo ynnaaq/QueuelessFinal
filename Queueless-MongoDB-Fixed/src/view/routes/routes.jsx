@@ -3,6 +3,7 @@ import Login from '../auths/login.jsx'
 import StudentPortal from '../students/studentPortal.jsx'
 import Admin from '../admin/admin.jsx'
 import Staff from '../staff/staff.jsx'
+import { AppLoadingScreen } from '../../components/PortalLoading.jsx'
 
 const adminPages = {
   Overview: '/admin',
@@ -26,10 +27,14 @@ const studentPages = {
   Review: '/student/review',
   Profile: '/student/profile',
 }
+const staffPages = {
+  Queue: '/staff', 'Live Monitor': '/staff/live-monitor', Schedule: '/staff/schedule',
+  Students: '/staff/students', Requirements: '/staff/requirements', Feedback: '/staff/feedback', Profile: '/staff/profile',
+}
 
 const roleRoutes = {
   admin: { path: '/admin', Component: Admin, pages: adminPages },
-  staff: { path: '/staff', Component: Staff },
+  staff: { path: '/staff', Component: Staff, pages: staffPages },
   student: { path: '/student', Component: StudentPortal, pages: studentPages },
 }
 
@@ -65,10 +70,7 @@ export default function AppRoutes({ session, checkingSession, onLogin, onLogout,
 
   // Verify saved sessions before rendering protected pages or redirecting.
   if (checkingSession) {
-    return <main className="app-loading" role="status" aria-live="polite">
-      <strong>Queueless</strong>
-      <span>Loading your session…</span>
-    </main>
+    return <AppLoadingScreen />
   }
   if (!route) return <Login onLogin={onLogin} />
 

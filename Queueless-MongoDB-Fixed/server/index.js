@@ -14,24 +14,29 @@ dotenv.config({ path: path.join(serverDirectory, '.env') })
 // Root .env remains a local-development fallback for the Vite variables.
 dotenv.config()
 
-// Connect to MongoDB Atlas
-await connectDB()
+let server
 
-// Initialize Express application
-const { app, initialize } = createApp({
-  seedDemo: process.env.SEED_DEMO === 'true',
-  adminEmail: process.env.ADMIN_EMAIL,
-  adminPassword: process.env.ADMIN_PASSWORD,
-})
+try {
+  await connectDB()
 
-await initialize()
+  const { app, initialize } = createApp({
+    seedDemo: process.env.SEED_DEMO === 'true',
+    adminEmail: process.env.ADMIN_EMAIL,
+    adminPassword: process.env.ADMIN_PASSWORD,
+  })
 
-const PORT = Number(process.env.PORT) || 3001
-const HOST = process.env.HOST || '0.0.0.0'
+  await initialize()
 
-const server = app.listen(PORT, HOST, () => {
-  console.log(`Queueless API listening on ${HOST}:${PORT}`)
-})
+  const PORT = Number(process.env.PORT) || 3001
+  const HOST = process.env.HOST || '0.0.0.0'
+
+  server = app.listen(PORT, HOST, () => {
+    console.log(`Queueless API listening on ${HOST}:${PORT}`)
+  })
+} catch (error) {
+  console.error('Queueless API startup failed:', error.message)
+  process.exitCode = 1
+}
 
 console.log(
   'Supabase configuration loaded:',
@@ -44,9 +49,11 @@ console.log(
 // Graceful shutdown
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    server.close(async () => {
+    const shutdown = async () => {
       await mongoose.disconnect()
       process.exit(0)
-    })
+    }
+    if (server) server.close(shutdown)
+    else void shutdown()
   })
 }

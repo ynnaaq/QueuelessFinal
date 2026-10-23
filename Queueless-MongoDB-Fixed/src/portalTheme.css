@@ -1,0 +1,93 @@
+/* Shared dark portal shell based on the approved Services reference. */
+.student-app,.staff-app{--canvas:#0a1426;--surface:#13213a;--ink:#edf3ff;--muted:#a9b9d6;--line:#2a3c59;--brand:#7465ff;--brand-soft:#292953;--mint-soft:#123e42;background:radial-gradient(circle at 72% -15%,#263b71 0,transparent 34%),#0a1426;color:var(--ink)}
+.student-sidebar,.staff-sidebar{background:linear-gradient(180deg,#111f3d,#0b1830);border-right-color:#2a3c59}.student-logo,.staff-brand{background:#0e1b35}.student-sidebar nav button,.staff-sidebar nav button{color:#aabbd8}.student-sidebar nav button:hover,.staff-sidebar nav button:hover{background:#ffffff0b}.student-sidebar nav button.active,.staff-sidebar nav button.active{background:linear-gradient(90deg,#3d397d,#252f58);box-shadow:inset 3px 0 #8a75ff}.student-sidebar nav button.active::before,.staff-sidebar nav button.active::before{display:none}.student-role-switch,.staff-role-switch{border-color:#8476ff!important;background:#efefff!important;color:#373092!important}
+.portal-header,.staff-header{border-color:#2a3c59;background:#101e38e8}.portal-header b,.staff-header b{color:#f1f5ff}.portal-header small,.staff-header small{color:#9fb4d9}.notification-button{border-color:#344968;background:#182946;color:#d7e4fb}.notification-button:hover{border-color:#786dff;background:#26365a;color:#fff}
+.student-content,.staff-content{color:var(--ink)}.page-title h1,.section-heading h2,.service-card h3,.staff-title h1{color:#f2f6ff}.page-title p,.section-heading p,.service-card>p,.staff-title p{color:#aab9d2}.page-title b{color:#9485ff}.service-card{border-color:#2a3d5d;background:linear-gradient(145deg,#172945,#11203a);box-shadow:0 18px 38px #0000002b}.service-card:hover{background:linear-gradient(145deg,#1b3050,#142643)}.service-card select{border-color:#3b4e6c;background:#162944;color:#edf3ff}.service-card label{color:#aebfe0}.service-meta span{background:#1b2d49}.service-meta small{color:#a0b1ce}.service-meta b{color:#eef4ff}.service-actions button{border-color:#52678b;background:#14233e;color:#eaf1ff}.service-actions .primary{border-color:#685cf1;background:linear-gradient(135deg,#7567ff,#5746e7)}.open-pill{background:#124c4b;color:#68f0d1}.active-reminder{border-color:#4c4a9a;background:#1e2850;color:#d7d5ff}.account,.staff-account{border-color:#2a3c59;background:#132440}.account>span,.staff-account>span{background:#334c7f}.profile-card,.profile-main,.profile-details span,.profile-footer,.empty-state,.requirements-card,.staff-title-stat,.staff-summary article,.staff-control-card,.staff-waiting-list,.staff-directory-card,.student-info-card,.schedule-card,.staff-profile-card{border-color:#2a3c59;background:#142540;color:#edf3ff}.profile-main h2,.profile-details b,.staff-summary strong,.staff-list-head h2,.staff-profile-head h2{color:#f0f4ff}.profile-main p,.profile-details small,.profile-footer p,.staff-summary p,.staff-list-head p{color:#a7b7d1}.staff-title>div:first-child>span,.staff-title-stat strong{color:var(--office-accent,#7465ff)}
+
+/* Remaining staff monitor elements previously kept their light-page tokens. */
+.staff-app .feature-notice,.staff-monitor-banner{border-color:#4a7d83;background:#123e42;color:#72e5d4}.staff-monitor-banner span{background:#1a6968;color:#d4fffa}.staff-monitor-grid article{border-color:#2a3d5d;background:linear-gradient(145deg,#172945,#11203a);box-shadow:0 14px 32px #00000026}.staff-monitor-grid h2{color:#eff4ff}.staff-monitor-grid p{color:#a7b9d8}.staff-monitor-grid article>div>span{background:#2b2b5d;color:#a99cff}.staff-monitor-grid em.closed{background:#28364d;color:#c1ccdf}.staff-monitor-grid dl span{background:#1b2d49}.staff-monitor-grid dl small{color:#9fb0cd}.staff-monitor-grid dl b{color:#f2f6ff}.staff-office-tabs{border-color:#2a3c59;background:#142540}.staff-office-tabs button{color:#b5c5df}.staff-office-tabs button>span,.staff-office-tabs button em{background:#243755;color:#b7c9e8}.staff-office-tabs button.active{background:#312d68;color:#fff}.staff-office-tabs button.active>span{background:var(--office-accent,#7465ff)}.staff-office-tabs button.active em{background:#1d2e4b;color:#fff}
+
+/* Page styles pre-date the shared theme and contain hard-coded white surfaces.
+   Keep this scoped to authenticated portals so it cannot affect login screens. */
+.student-app .service-card,.student-app .student-stats article,.student-app .history-card,.student-app .history-card article,.student-app .requirements-card,.student-app .queue-tip,.student-app .empty-state,.student-app .profile-card,.student-app .profile-main,.student-app .profile-footer,.student-app .profile-details span,.staff-app .staff-monitor-grid article,.staff-app .staff-office-tabs,.staff-app .staff-summary article,.staff-app .serving-panel,.staff-app .staff-waiting-list,.staff-app .staff-directory-card,.staff-app .requirement-card,.staff-app .requirement-hero,.staff-app .feedback-list,.staff-app .feedback-summary article,.staff-app .student-info-card,.staff-app .schedule-card,.staff-app .staff-profile-card{background:#142540!important;border-color:#2a3c59!important;color:#edf3ff!important}
+.student-app .service-meta span,.student-app .history-head,.staff-app .staff-monitor-grid dl span,.staff-app .staff-table-head,.staff-app .current-student,.staff-app .requirement-note,.staff-app .staff-office-tabs button>span,.staff-app .staff-office-tabs button em{background:#1b2d49!important;color:#c4d2eb!important}
+.student-app .service-card select,.student-app .profile-form-fields input,.student-app .profile-form-fields select,.staff-app input,.staff-app select{background:#162944!important;border-color:#3b4e6c!important;color:#edf3ff!important}
+.student-app .service-card h1,.student-app .service-card h2,.student-app .service-card h3,.student-app .service-card b,.student-app .history-card b,.staff-app h1,.staff-app h2,.staff-app h3,.staff-app b,.staff-app strong,.staff-app dd{color:#edf3ff!important}.student-app .service-card p,.student-app .service-card small,.student-app .history-card small,.staff-app p,.staff-app small,.staff-app label,.staff-app dt{color:#a9b9d6!important}
+
+/* Student dashboard: remove the remaining legacy light surfaces, including
+   welcome, queue, calendar, review, modal and sidebar controls. */
+.student-app .welcome-card,.student-app .mini-service-grid button,.student-app .calendar-card,.student-app .review-list,.student-app .student-monitor-grid article{background:linear-gradient(145deg,#172945,#11203a)!important;border-color:#2a3c59!important;color:#edf3ff!important;box-shadow:0 14px 32px #00000026!important}
+.student-app .welcome-card h2,.student-app .welcome-card h2 em,.student-app .mini-service-grid b,.student-app .calendar-card h2,.student-app .review-list b,.student-app .student-monitor-head h2,.student-app .student-monitor-grid dl b{color:#edf3ff!important}
+.student-app .welcome-card p,.student-app .welcome-steps span,.student-app .mini-service-grid small,.student-app .calendar-card p,.student-app .calendar-card label,.student-app .review-list p,.student-app .student-monitor-head p,.student-app .student-monitor-grid dl small{color:#a9b9d6!important}
+.student-app .welcome-steps b{background:#2b2b5d!important;color:#a99cff!important}.student-app .welcome-steps i{background:#405171!important}
+.student-app .mini-service-grid button>span,.student-app .calendar-summary span,.student-app .student-monitor-grid dl span{background:#1b2d49!important;color:#c4d2eb!important}
+.student-app .calendar-fields input,.student-app .calendar-fields select{background:#162944!important;border-color:#3b4e6c!important;color:#edf3ff!important}
+.student-app .review-list article{border-color:#2a3c59!important}.student-app .student-monitor-head em.closed{background:#28364d!important;color:#c1ccdf!important}
+.student-app .queue-tip{background:#1d2850!important;border-color:#4a4b87!important;color:#d8dcff!important}.student-app .queue-tip b{color:#a99cff!important}.student-app .queue-tip p{color:#b8c4df!important}
+.student-app .student-modal{background:#142540!important;color:#edf3ff!important}.student-app .student-modal h2{color:#edf3ff!important}.student-app .modal-close{background:#263957!important;color:#d7e4fb!important}.student-app .requirement-list p{border-color:#2a3c59!important;color:#c4d2eb!important}.student-app .feedback-label{color:#c4d2eb!important}.student-app .feedback-label textarea{background:#162944!important;border-color:#3b4e6c!important;color:#edf3ff!important}.student-app .modal-secondary{background:#1b2d49!important;border-color:#3b4e6c!important;color:#bdb4ff!important}
+.student-app .served-confirmation button{background:#183c45!important;color:#72e5d4!important}
+.student-sidebar .student-role-switch,.staff-sidebar .staff-role-switch{border-color:#5f5bb9!important;background:#252654!important;color:#c6c0ff!important}.student-sidebar .student-role-switch:hover,.staff-sidebar .staff-role-switch:hover{background:#33306b!important;color:#fff!important}
+.staff-app .staff-profile-card{background:linear-gradient(145deg,#172945,#11203a)!important}.staff-app .staff-profile-head{border-color:#2a3c59!important}.staff-app .staff-profile-head p,.staff-app .staff-profile-form label{color:#a9b9d6!important}.staff-app .staff-profile-head em{background:#2b2b5d!important;color:#bdb4ff!important}.staff-app .staff-profile-form input:disabled,.staff-app .staff-profile-form select:disabled{background:#1b2d49!important;color:#a9b9d6!important;opacity:1}.staff-app .staff-profile-form option{background:#162944;color:#edf3ff}
+
+/* Keep schedule controls readable at every portal width. The old auto grid
+   track could shrink the destructive action until its label was clipped. */
+.staff-app .schedule-card{max-width:1060px}.staff-app .schedule-card-head,.staff-app .schedule-actions{border-color:#2a3c59!important}.staff-app .schedule-card h2{color:#edf3ff!important}.staff-app .schedule-card p,.staff-app .schedule-actions span,.staff-app .schedule-row label{color:#a9b9d6!important}.staff-app .schedule-row{grid-template-columns:minmax(170px,1.3fr) minmax(140px,1fr) minmax(140px,1fr) minmax(78px,max-content);border-color:#2a3c59!important}.staff-app .schedule-remove{min-width:78px;height:36px;padding:0 12px;background:#3d2638!important;color:#ffb8c5!important;white-space:nowrap}.staff-app .schedule-remove:hover{background:#573047!important;color:#fff!important}.staff-app .schedule-card-head button{background:#2b2b5d!important;color:#bdb4ff!important}
+@media (max-width:640px){.staff-app .schedule-row{grid-template-columns:1fr 1fr}.staff-app .schedule-row label:first-child{grid-column:1/-1}.staff-app .schedule-remove{grid-column:1/-1;width:100%}}
+
+/* The student portal has eight destinations.  On phones they need a real
+   bottom bar instead of a grid: the section wrappers use display:contents,
+   which some Android in-app browsers lay out as a full-height grid item. */
+@media (max-width:760px){
+  .student-app{padding-bottom:76px}
+  .student-sidebar{
+    position:fixed;
+    inset:auto 0 0 0;
+    z-index:40;
+    width:100%;
+    min-height:0;
+    height:68px;
+    display:block;
+    border-top:1px solid #2a3c59;
+    border-right:0;
+    background:#101e38;
+    box-shadow:0 -10px 28px #00000042;
+  }
+  .student-sidebar .student-logo,.student-sidebar .school-badge,.student-sidebar .account,.student-sidebar .student-role-switch{display:none}
+  .student-sidebar nav{
+    height:68px;
+    padding:4px 6px;
+    display:flex;
+    align-items:stretch;
+    gap:3px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .student-sidebar nav::-webkit-scrollbar{display:none}
+  .student-sidebar .sidebar-nav-section{display:contents}
+  .student-sidebar .sidebar-section-label{display:none}
+  .student-sidebar nav button{
+    flex:0 0 72px;
+    min-width:72px;
+    min-height:60px;
+    height:60px;
+    padding:4px 2px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    border-radius:9px;
+    color:#aabbd8;
+    font-size:9px;
+    line-height:1.1;
+    text-align:center;
+    white-space:nowrap;
+  }
+  .student-sidebar nav button i{width:auto;height:18px;flex:0 0 18px;font-size:16px}
+  .student-sidebar nav button span{display:block;font-size:8px}
+  .student-sidebar nav button.active{background:#292953;box-shadow:inset 0 3px #8a75ff;color:#fff}
+  .student-sidebar nav button.active::before{display:none}
+  .student-main{width:100%;margin-left:0}
+}

@@ -20,4 +20,25 @@ const ticketSchema = new mongoose.Schema({
 
 ticketSchema.index({ officeId: 1, visitDate: 1, status: 1, order: 1 })
 
+// These constraints are the final line of defence when two browser requests
+// arrive at the API at the same time.  Application-level checks alone cannot
+// prevent a read-then-write race.
+ticketSchema.index(
+  { studentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['waiting', 'serving', 'skipped'] } },
+    name: 'one_active_ticket_per_student',
+  }
+)
+
+ticketSchema.index(
+  { officeId: 1, visitDate: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'serving' },
+    name: 'one_serving_ticket_per_office_day',
+  }
+)
+
 export default mongoose.model('Ticket', ticketSchema)

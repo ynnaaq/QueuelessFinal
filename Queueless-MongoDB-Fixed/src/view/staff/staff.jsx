@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getPortalState, portalApi } from '../../services/auth.js'
+import { officeIdentity } from '../../components/OfficeIdentity.jsx'
 import './staff.css'
+import { PortalSkeleton } from '../../components/PortalLoading.jsx'
+import SidebarIcon from '../../components/SidebarIcon.jsx'
 
 const serviceData = {
   Registrar: { code: 'R', description: 'Academic records, enrollment and certifications', requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
@@ -12,8 +15,7 @@ const serviceData = {
 
 const initials = (name = '') => name.split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0,2).toUpperCase() || 'ST'
 
-export default function Staff({ onLogout, user, token, onSwitchRole }) {
-  const [page, setPage] = useState('Queue')
+export default function Staff({ onLogout, user, token, onSwitchRole, page = 'Queue', onNavigate }) {
   const [activeService, setActiveService] = useState(user?.office || 'Registrar')
   const [queues, setQueues] = useState({})
   const [skipped, setSkipped] = useState([])
@@ -27,6 +29,7 @@ export default function Staff({ onLogout, user, token, onSwitchRole }) {
   const [requirements, setRequirements] = useState(() => Object.fromEntries(Object.entries(serviceData).map(([office, data]) => [office, [...data.requirements]])))
   const [staffProfile, setStaffProfile] = useState(() => ({ name: user?.name || 'Ana Reyes', email: user?.email || 'staff@school.edu', office: user?.office || 'Registrar' }))
   const [schedule, setSchedule] = useState(() => user?.schedule || [])
+  const [loading, setLoading] = useState(true)
 
   const applyState = useCallback(({offices,tickets,feedback}) => {
     setOfficeState(offices)
@@ -44,10 +47,15 @@ export default function Staff({ onLogout, user, token, onSwitchRole }) {
   const refresh=async()=>applyState(await getPortalState(token))
   useEffect(()=>{
     let disposed=false
-    const poll=async()=>{try {const state=await getPortalState(token);if(!disposed)applyState(state)}catch(error){if(!disposed)setNotice(error.message)}}
+    const poll=async()=>{try {const state=await getPortalState(token);if(!disposed)applyState(state)}catch(error){if(!disposed)setNotice(error.message)}finally{if(!disposed)setLoading(false)}}
     poll();const timer=setInterval(poll,4000)
     return ()=>{disposed=true;clearInterval(timer)}
   },[token,applyState])
+  useEffect(() => {
+    if (!notice) return undefined
+    const timeout = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
   const queue=queues[activeService] || []
   const waitingCount=Object.values(queues).reduce((n,items)=>n+items.length,0)
   const notify=(message)=>setNotice(message)
@@ -86,19 +94,19 @@ export default function Staff({ onLogout, user, token, onSwitchRole }) {
   const tabSections = [['Workspace',['Queue','Live Monitor','Schedule']],['Service desk',['Students','Requirements','Feedback']],['Account',['Profile']]]
 
   return (
-    <main className="staff-app">
+    <main className="staff-app" style={{ '--office-accent': officeIdentity(officeState.find(office => office.name === activeService) || activeService).color }}>
       <aside className="staff-sidebar">
         <div className="staff-brand"><img className="staff-mark" src="/campus-queue-logo.png" alt="" /><div><b>Queueless</b><small>Staff workspace</small></div></div>
-        <nav>{tabSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{tabs.filter(([,label]) => labels.includes(label)).map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => setPage(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</div>)}</nav>
+        <nav>{tabSections.map(([section,labels]) => <div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{tabs.filter(([,label]) => labels.includes(label)).map(([icon,label]) => <button type="button" aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={() => onNavigate(label)} key={label}><i><SidebarIcon name={icon}/></i><span>{label}</span>{label === 'Queue' && waitingCount > 0 && <em>{waitingCount}</em>}</button>)}</div>)}</nav>
         {user.roles?.includes('student') && <button type="button" className="staff-role-switch" onClick={() => onSwitchRole('student')}>Switch to Student</button>}
         <div className="staff-account"><span>{initials(user?.name || 'Ana Reyes')}</span><p><b>{user?.name || 'Ana Reyes'}</b><small>{user?.staffRole || 'Service staff'}</small></p><button onClick={onLogout}>⇥</button></div>
       </aside>
 
       <section className="staff-main">
         <header className="staff-header"><div><small>Staff Portal</small><b>{page}</b></div><span className="live-indicator">Queue system live</span></header>
-        <div className="staff-content">
+        <div className="staff-content page-transition" key={page}>
           {notice && <div className="feature-notice">{notice}</div>}
-          <StaffTitle page={page} office={activeService} waiting={queue.length} />
+          {loading ? <PortalSkeleton label="Loading staff workspace" /> : <><StaffTitle page={page} office={activeService} waiting={queue.length} />
           {page !== 'Feedback' && page !== 'Profile' && page !== 'Live Monitor' && <OfficeTabs assigned={user?.office} active={activeService} queues={queues} offices={officeState} onChange={switchOffice} />}
           {page === 'Queue' && <QueuePage open={officeOpen} office={activeService} queue={queue} current={current} recentlyServed={recentlyServed} selected={selected} onSelect={setSelected} callNext={callNext} skip={skipCurrent} recall={() => recall()} served={markServed} />}
           {page === 'Live Monitor' && <LiveMonitor offices={officeState} />}
@@ -106,7 +114,7 @@ export default function Staff({ onLogout, user, token, onSwitchRole }) {
           {page === 'Requirements' && <Requirements office={activeService} officeInfo={officeState.find((office) => office.name === activeService)} requirements={requirements[activeService] || []} onAdd={addRequirement} />}
           {page === 'Feedback' && <Feedback recent={feedback} />}
           {page === 'Schedule' && <ScheduleEditor schedule={schedule} onSave={saveSchedule} />}
-          {page === 'Profile' && <StaffProfile profile={staffProfile} onSave={saveProfile} />}
+          {page === 'Profile' && <StaffProfile profile={staffProfile} onSave={saveProfile} />}</>}
         </div>
       </section>
     </main>
@@ -126,18 +134,6 @@ function StaffTitle({ page, office, waiting }) {
   return <section className="staff-title"><div><span>STAFF WORKSPACE · {office.toUpperCase()}</span><h1>{copy[0]}</h1><p>{copy[1]}</p></div><div className="staff-title-stat"><small>Waiting now</small><strong>{waiting}</strong></div></section>
 }
 
-function SidebarIcon({ name }) {
-  const paths = {
-    queues: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
-    student: <><circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2M9 11l3 3 3-3"/></>,
-    check: <path d="m5 12 4 4L19 6"/>,
-    star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>,
-    calendar: <><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,
-    monitor: <><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z"/><circle cx="12" cy="12" r="2"/></>,
-    profile: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
-}
 
 function LiveMonitor({ offices }) {
   const waiting = offices.reduce((sum, office) => sum + (office.waiting || 0), 0)

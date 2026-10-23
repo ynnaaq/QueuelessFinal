@@ -8,7 +8,9 @@ import {
   portalApi,
   storeSession,
 } from './services/auth.js'
+import { signOutFromSupabase } from './services/supabaseAuth.js'
 import './App.css'
+import './portalTheme.css'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -32,8 +34,16 @@ export default function App() {
         const next = { token: saved.token, user }
         storeSession(next)
         if (active) setSession(next)
-      } catch {
-        clearStoredSession()
+      } catch (error) {
+        // A network outage, Render cold start, or a transient 5xx response is
+        // not evidence that the user signed out.  Keep the last known session
+        // so a refresh does not turn an availability incident into data loss.
+        // Only a definite authentication rejection invalidates it locally.
+        if (/^Your session has expired\./i.test(error?.message || '')) {
+          clearStoredSession()
+        } else if (active) {
+          setSession(saved)
+        }
       } finally {
         if (active) setCheckingSession(false)
       }
@@ -53,6 +63,9 @@ export default function App() {
     try {
       if (session?.token) await apiSignOut(session.token)
     } finally {
+      // Clear the identity-provider session too. A failed network request must
+      // not keep a usable local Supabase token after an explicit logout.
+      try { await signOutFromSupabase() } catch { /* local app logout still succeeds */ }
       clearStoredSession()
       setSession(null)
       setCheckingSession(false)

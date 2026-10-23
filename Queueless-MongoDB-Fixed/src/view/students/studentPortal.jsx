@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getPortalState, portalApi } from '../../services/auth.js'
 import { studentTickets } from '../../services/studentTickets.js'
+import { OfficeIcon as SharedOfficeIcon } from '../../components/OfficeIdentity.jsx'
 import './students.css'
+import { PortalSkeleton } from '../../components/PortalLoading.jsx'
+import SidebarIcon from '../../components/SidebarIcon.jsx'
 
 const services = [
   { office: 'Registrar', icon: 'registrar', color: '#7357d8', description: 'Academic records, enrollment and certifications', wait: 4, options: ['Transcript / school records', 'Certificate request', 'Enrollment concern'], requirements: ['Valid school ID', 'Completed request form', 'Authorization letter if requesting for another person'] },
@@ -82,6 +85,7 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
   const [notice, setNotice] = useState('')
   const [promotionNotice, setPromotionNotice] = useState(null)
   const [promotionOpen, setPromotionOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [choices, setChoices] = useState(() => Object.fromEntries(services.map((service) => [service.office, service.options[0]])))
   const [profile, setProfile] = useState(() => ({ name: user?.name || 'Student', email: user?.email || '', id: validSchoolId(user?.accountId) ? user.accountId : '', course: user?.course || user?.department || '', yearLevel: user?.yearLevel || 'First year', semester: user?.semester || '1st semester', avatar: user?.avatar || '' }))
   const [returningUser] = useState(() => {
@@ -153,11 +157,17 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
       const version = queueMutation.current
       try { const state=await getPortalState(token); if(!disposed && version === queueMutation.current && !cancelPending.current) applyState(state) }
       catch(error) {if(!disposed && version === queueMutation.current)setNotice(error.message)}
+      finally { if (!disposed) setLoading(false) }
     }
     poll()
     const timer=setInterval(poll,2000)
     return ()=>{disposed=true;clearInterval(timer)}
   }, [token, applyState])
+  useEffect(() => {
+    if (!notice) return undefined
+    const timeout = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
 
   useEffect(() => {
     let disposed = false
@@ -175,7 +185,7 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
     const known=services.find((service)=>service.office===office.name)
     const options=office.services.map((service)=>service.name)
     const selected=choices[office.name] || options[0] || ''
-    return { office:office.name, icon:known?.icon || 'office', color:known?.color || '#526bd9', description:known?.description || `Services and assistance from the ${office.name} office`, wait:office.wait, options, open:office.open, requirements:office.services.find((service)=>service.name===selected)?.requirements || ['Valid school ID'] }
+    return { ...office, office:office.name, icon:office.icon || known?.icon || 'office', color:office.color || known?.color || '#526bd9', description:office.description || known?.description || `Services and assistance from the ${office.name} office`, wait:office.wait, options, open:office.open, requirements:office.services.find((service)=>service.name===selected)?.requirements || ['Valid school ID'] }
   })
   const saveProfile=async(next)=>{
     const { course, ...profileDetails } = next
@@ -254,16 +264,16 @@ export default function StudentPortal({ onLogout, user, token, page = 'Dashboard
 
       <section className="student-main">
         <header className="portal-header"><div><small>Student Portal</small><b>{page}</b></div><div className="portal-header-actions"><button type="button" className={`notification-button ${promotionNotice ? 'unread' : ''}`} aria-label="Notifications" onClick={() => promotionNotice && setPromotionOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>{promotionNotice && <i />}</button><span className="live-indicator">Queue system live</span></div></header>
-        <div className="student-content">
+        <div className="student-content page-transition" key={page}>
           {notice && <div className="feature-notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
-          {page === 'Dashboard' && <Dashboard profile={profile} queue={queue} history={history} go={go} returningUser={returningUser} />}
+          {loading ? <PortalSkeleton label="Loading student portal" /> : <>{page === 'Dashboard' && <Dashboard profile={profile} queue={queue} history={history} go={go} returningUser={returningUser} />}
           {page === 'Services' && <Services services={availableServices} active={queue} choices={choices} setChoices={setChoices} onDetails={setSelectedService} onJoin={joinQueue} />}
           {page === 'Calendar' && <Calendar services={availableServices} active={queue} choices={choices} onJoin={joinQueue} />}
           {page === 'My Queue' && <MyQueue queue={queue} cancelling={cancelling} onCancel={cancelQueue} go={go} />}
           {page === 'Live Monitor' && <LiveMonitor offices={officeState} />}
           {page === 'History' && <History history={history} onRate={setSelectedService} />}
           {page === 'Review' && <Review history={history} onRate={setSelectedService} />}
-          {page === 'Profile' && <Profile profile={profile} onSave={saveProfile} onPasswordSave={(password) => saveProfile({password})} onAvatarPreview={(avatar) => setProfile((current) => ({ ...current, avatar }))} onLogout={onLogout} />}
+          {page === 'Profile' && <Profile profile={profile} onSave={saveProfile} onPasswordSave={(password) => saveProfile({password})} onAvatarPreview={(avatar) => setProfile((current) => ({ ...current, avatar }))} onLogout={onLogout} />}</>}
         </div>
       </section>
 
@@ -313,7 +323,7 @@ function Services({ services, active, choices, setChoices, onDetails, onJoin }) 
     <Title title="Offices & services" subtitle="Choose the exact service you need and review the required documents before taking a ticket." />
     {active && <div className="active-reminder"><b>Active ticket: {active.ticket}</b><span>{active.office} · {active.serviceName}</span><small>You can only hold one active queue ticket at a time.</small></div>}
     <div className="service-grid">{services.map((service) => <article className="service-card" style={{ '--service-color': service.color }} key={service.office}>
-      <div className="service-top"><span className="office-icon service-logo"><OfficeIcon name={service.icon}/></span><span className="open-pill">{service.open ? "Open" : "Closed"}</span></div>
+      <div className="service-top"><SharedOfficeIcon office={service} size="lg" label={false}/><span className="open-pill">{service.open ? "Open" : "Closed"}</span></div>
       <h3>{service.office}</h3><p>{service.description}</p>
       <label>School service<select value={choices[service.office]} onChange={(event) => setChoices((current) => ({ ...current, [service.office]: event.target.value }))}>{service.options.map((option) => <option key={option}>{option}</option>)}</select></label>
       <div className="service-meta"><span><small>Typical service time</small><b>~{service.wait} min</b></span><span><small>Requirements</small><b>{service.requirements.length} items</b></span></div>
@@ -451,19 +461,6 @@ function PasswordEye({ visible }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/>{visible&&<path d="M4 4 20 20"/>}</svg>
 }
 
-function SidebarIcon({ name }) {
-  const paths = {
-    home: <><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 21v-6h6v6"/></>,
-    services: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
-    calendar: <><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,
-    queues: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
-    monitor: <><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z"/><circle cx="12" cy="12" r="2"/></>,
-    history: <><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></>,
-    star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>,
-    profile: <><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
-}
 
 function RequirementsModal({ service, choice, onClose, onJoin, active }) {
   return <div className="student-overlay" role="dialog" aria-modal="true"><div className="student-modal"><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="modal-office"><OfficeIcon name={service.icon}/></span><p className="float-kicker">{service.office}</p><h2>{choice}</h2><p className="modal-copy">Prepare these before joining so your transaction is smoother when your number is called.</p><div className="requirement-list">{service.requirements.map((item) => <p key={item}><i>✓</i><span>{item}</span></p>)}</div><button className="modal-primary" disabled={Boolean(active) || !service.open} onClick={() => onJoin(service)}>{active ? 'You already have an active ticket' : 'Requirements ready — get ticket'}</button></div></div>

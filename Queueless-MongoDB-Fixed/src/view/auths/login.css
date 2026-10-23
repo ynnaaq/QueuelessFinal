@@ -3,33 +3,12 @@
   isolation: isolate;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    radial-gradient(
-      ellipse 70% 56% at 88% -8%,
-      #52679f 0%,
-      #314978 38%,
-      transparent 72%
-    ),
-    radial-gradient(
-      ellipse 55% 48% at -8% 102%,
-      #263f71 0%,
-      transparent 72%
-    ),
-    linear-gradient(
-      135deg,
-      #0b1732 0%,
-      #122447 47%,
-      #1d3562 100%
-    );
+  background: linear-gradient(135deg, #0b1732 0%, #122447 55%, #1d3562 100%);
 }
 
 .login-page::before,
 .login-page::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  border-radius: 50%;
-  pointer-events: none;
+  display: none;
 }
 
 .login-page::before {
@@ -821,21 +800,26 @@
 }
 
 /* Scrollbar inside registration form */
+.page-create .auth-card {
+  scrollbar-color: #7567e8 #eef0ff;
+}
+
 .page-create .auth-card::-webkit-scrollbar {
   width: 7px;
 }
 
 .page-create .auth-card::-webkit-scrollbar-track {
-  background: transparent;
+  background: #eef0ff;
+  border-radius: 20px;
 }
 
 .page-create .auth-card::-webkit-scrollbar-thumb {
-  background: #c4cad8;
+  background: #7567e8;
   border-radius: 20px;
 }
 
 .page-create .auth-card::-webkit-scrollbar-thumb:hover {
-  background: #aab2c3;
+  background: #5b4cce;
 }
 
 /* Tablet */

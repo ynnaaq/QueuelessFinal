@@ -53,12 +53,13 @@ const api = async (path, options = {}) => {
   }
 
   if (!response.ok) {
-    const fallback =
+    const error = new Error(data.message || (
       response.status >= 500
         ? 'The server is unavailable right now. Please try again in a moment.'
         : `Request failed (${response.status}). Please check your details and try again.`
-
-    throw new Error(data.message || fallback)
+    ))
+    error.status = response.status
+    throw error
   }
 
   return data

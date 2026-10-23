@@ -6,13 +6,15 @@ import {
   deleteStudentProfile
 } from '../../services/studentProfiles.js'
 import './admin.css'
+import { PortalSkeleton } from '../../components/PortalLoading.jsx'
+import SidebarIcon from '../../components/SidebarIcon.jsx'
 
 const initialOffices = [
   { id:'reg', name:'Registrar', code:'R', open:true, waiting:3, serving:'R-020', served:46, avgWait:12, rating:4.8, completion:94, hours:'8:00 AM – 5:00 PM', services:[{name:'Transcript / school records', requirements:['Valid school ID','Completed request form']},{name:'Certificate request', requirements:['Valid school ID','Request form']},{name:'Enrollment concern', requirements:['Valid school ID','Enrollment documents']}] },
   { id:'fin', name:'Finance', code:'F', open:true, waiting:3, serving:'F-103', served:38, avgWait:16, rating:4.6, completion:91, hours:'8:00 AM – 5:00 PM', services:[{name:'Tuition / school fees', requirements:['Valid school ID','Payment or reference document']},{name:'Official receipt request', requirements:['Valid school ID','Payment reference']},{name:'Account assessment', requirements:['Valid school ID','Assessment form when applicable']}] },
   { id:'csdl', name:'CSDL', code:'C', open:true, waiting:1, serving:'C-017', served:29, avgWait:9, rating:4.9, completion:96, hours:'8:00 AM – 5:00 PM', services:[{name:'Student clearance', requirements:['Valid school ID','Clearance form']},{name:'ID concern', requirements:['Valid school ID','Proof of enrollment']}] },
   { id:'mkt', name:'Marketing', code:'M', open:true, waiting:0, serving:'', served:0, avgWait:4, rating:0, completion:0, hours:'8:00 AM – 5:00 PM', services:[{name:'Marketing inquiry', requirements:['Valid school ID','Relevant request details']},{name:'Sponsorship / partnership request', requirements:['Valid school ID','Request letter or proposal']},{name:'Branding material request', requirements:['Valid school ID','Completed request form']}] },
-  { id:'book', name:'Bookstore', code:'B', open:true, waiting:0, serving:'', served:0, avgWait:3, rating:0, completion:0, hours:'8:00 AM – 5:00 PM', services:[{name:'Textbook purchase inquiry', requirements:['Valid school ID','Course or subject details']},{name:'School supplies purchase', requirements:['Valid school ID']},{name:'Bookstore order concern', requirements:['Valid school ID','Order or receipt details']}] },
+  { id:'book', name:'Bookstore', code:'B', open:true, waiting:0, serving:'', served:0, avgWait:3, rating:0, completion:0, hours:'8:00 AM – 5:00 PM', services:[{name:'Textbook purchase inquiry', requirements:['Valid school ID','Course or subject details']},{name:'School supplies purchase', requirements:['Valid school ID']},{name:'Uniform', requirements:['Valid school ID','Order or receipt details']}] },
 ]
 
 const nav = [
@@ -36,13 +38,15 @@ export default function Admin({ onLogout, user, token, page = 'Overview', onNavi
   const [addStaffOpen,setAddStaffOpen] = useState(false)
   const [addOfficeOpen,setAddOfficeOpen] = useState(false)
   const [scheduleMember,setScheduleMember] = useState(null)
+  const [editingStaff,setEditingStaff] = useState(null)
   const [notice,setNotice] = useState('')
   const [feedback,setFeedback] = useState([])
   const [queueTrends,setQueueTrends] = useState([])
   const [refreshing,setRefreshing] = useState(false)
   const [auditLogs,setAuditLogs] = useState([])
+  const [loading,setLoading] = useState(true)
 
-  const notify = (text) => { setNotice(text); window.setTimeout(()=>setNotice(''),2600) }
+  const notify = (text) => setNotice(text)
   const recordAudit = async (action, subject) => {
     try {
       const { log } = await portalApi('/api/admin/audit-logs', token, { method: 'POST', body: JSON.stringify({ action, subject }) })
@@ -131,20 +135,28 @@ const toggleStaff = (id) => {
     })
   }
   const deleteStudent=async(student)=>{if(!window.confirm(`Delete ${student.name}'s student profile? This cannot be undone.`))return;try{await deleteStudentProfile(token, student.id);await refresh();recordAudit('Deleted student profile',student.name);notify('Student profile deleted.')}catch(error){notify(error.message)}}
-  const deleteStaff=async(member)=>{if(!window.confirm(`Delete ${member.name}'s staff account? This cannot be undone.`))return;try{await portalApi('/api/admin/users/'+member.id,token,{method:'DELETE'});await refresh();recordAudit('Deleted staff account',member.name);notify('Staff account deleted.')}catch(error){notify(error.message)}}
+  const deleteStaff=async(member)=>{if(!window.confirm(`Remove ${member.name}'s staff account? They will no longer be able to sign in.`))return;try{await portalApi('/api/admin/staff/'+member.id,token,{method:'DELETE'});await refresh();recordAudit('Removed staff account',member.name);notify('Staff account removed.')}catch(error){notify(error.message)}}
+  const demoteStaff=async(member)=>{if(!window.confirm(`Demote ${member.name} to a student account? Their staff access and schedule will be removed.`))return;try{await portalApi('/api/admin/staff/'+member.id+'/demote',token,{method:'POST'});await refresh();recordAudit('Demoted staff to student',member.name);notify('Staff member demoted to student.')}catch(error){notify(error.message)}}
+  const saveStaffDetails=async(member,details)=>{try{await portalApi('/api/admin/staff/'+member.id,token,{method:'PATCH',body:JSON.stringify(details)});await refresh();setEditingStaff(null);recordAudit('Updated staff assignment',member.name);notify('Staff office and position updated.')}catch(error){notify(error.message)}}
   const reviewStaff=(id,action)=>mutate('/api/admin/staff/'+id+'/approval','PATCH',{action})
   const toggleOffice=(id)=>mutate('/api/offices/'+id,'PATCH',{open:!offices.find(o=>o.id===id).open})
   const deleteOffice=async(office)=>{if(!window.confirm(`Delete ${office.name}? This removes its services and cannot be undone.`))return;try{await portalApi('/api/offices/'+office.id,token,{method:'DELETE'});await refresh();recordAudit('Deleted office',office.name);notify('Office deleted.')}catch(error){notify(error.message)}}
   const addRequirement=(id,serviceIndex,requirement)=>mutate('/api/offices/'+id+'/requirements','POST',{serviceIndex,requirement})
+  const renameService=(officeId,serviceIndex,name)=>mutate(`/api/offices/${officeId}/services/${serviceIndex}`,'PATCH',{name})
   const addStaff=async(entry)=>{try{const result=await portalApi('/api/admin/staff/invitations',token,{method:'POST',body:JSON.stringify(entry)});await refresh();setAddStaffOpen(false);notify(result.message||'Promotion invitation sent.')}catch(error){notify(error.message)}}
   const addOffice=async(entry)=>{if(await mutate('/api/offices','POST',entry))setAddOfficeOpen(false)}
   const saveStaffSchedule=async(schedule)=>{if(await mutate('/api/admin/staff/'+scheduleMember.id+'/schedule','PATCH',{schedule}))setScheduleMember(null)}
   useEffect(()=>{
     let disposed=false
-    const poll=async()=>{try{const state=await getPortalState(token);if(!disposed)applyState(state)}catch(error){if(!disposed)setNotice(error.message)}}
+    const poll=async()=>{try{const state=await getPortalState(token);if(!disposed)applyState(state)}catch(error){if(!disposed)setNotice(error.message)}finally{if(!disposed)setLoading(false)}}
     poll();const timer=setInterval(poll,4000)
     return ()=>{disposed=true;clearInterval(timer)}
   },[token])
+  useEffect(() => {
+    if (!notice) return undefined
+    const timeout = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
 
   const content = {
     Overview:<Overview offices={offices} students={students} staff={staff} queueTrends={queueTrends} setPage={go} />,
@@ -158,9 +170,12 @@ const toggleStaff = (id) => {
     onAdd={() => setAddStaffOpen(true)}
     onSchedule={setScheduleMember}
     onDelete={deleteStaff}
+    onEdit={setEditingStaff}
+    onDemote={demoteStaff}
+    offices={offices}
   />
 ),
-    'Offices & Services':<OfficeManager offices={offices} toggleOffice={toggleOffice} addRequirement={addRequirement} onDelete={deleteOffice} onAdd={()=>setAddOfficeOpen(true)} />,
+    'Offices & Services':<OfficeManager offices={offices} toggleOffice={toggleOffice} addRequirement={addRequirement} renameService={renameService} onDelete={deleteOffice} onAdd={()=>setAddOfficeOpen(true)} />,
     Feedback:<FeedbackPage feedback={feedback} offices={offices} />,
     Performance:<Performance offices={offices} />,
     'Audit Logs':<AuditLogs logs={auditLogs} />,
@@ -172,34 +187,22 @@ const toggleStaff = (id) => {
     <aside className={`admin-sidebar ${menuOpen?'open':''}`}>
       <div className="admin-profile admin-profile-card"><span>{initials(adminName)}</span><div><b>{adminName}</b><small>Administrator</small></div><button type="button" onClick={onLogout} title="Sign out" aria-label="Sign out">Sign out <span aria-hidden="true">→</span></button></div>
       <div className="admin-logo"><Mark/><div><b>Queueless</b><small>Admin console</small></div><button className="close-admin-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
-      <nav>{navSections.map(([section,names])=><div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{nav.filter(([name])=>names.includes(name)).map(([name,icon])=><button className={page===name?'selected':''} onClick={()=>go(name)} key={name}><i><NavIcon name={icon}/></i><span>{name}</span>{name==='Live Queues'&&<em>{offices.reduce((n,o)=>n+o.waiting,0)}</em>}</button>)}</div>)}</nav>
+      <nav>{navSections.map(([section,names])=><div className="sidebar-nav-section" key={section}><span className="sidebar-section-label">{section}</span>{nav.filter(([name])=>names.includes(name)).map(([name,icon])=><button className={page===name?'selected':''} onClick={()=>go(name)} key={name}><i><SidebarIcon name={icon}/></i><span>{name}</span>{name==='Live Queues'&&<em>{offices.reduce((n,o)=>n+o.waiting,0)}</em>}</button>)}</div>)}</nav>
       <div className="admin-profile"><span>{initials('School Admin')}</span><div><b>School Admin</b><small>Administrator</small></div><button type="button" onClick={onLogout} title="Log out" aria-label="Log out">⇥</button></div>
     </aside>
 
     <section className="admin-main">
       <header className="admin-header"><div className="admin-header-left"><button className="admin-menu-toggle" onClick={()=>setMenuOpen(true)}>☰</button><div><small>Admin Console</small><b>{page}</b></div></div><div className="admin-header-right"><button className={`admin-refresh ${refreshing?'refreshing':''}`} type="button" onClick={refreshNow} disabled={refreshing} aria-label="Refresh dashboard data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 9.2M4 13a8 8 0 0 0 14.9 3.9l2.1-2.1M3 4v5.2h5.2M21 20v-5.2h-5.2"/></svg><span>{refreshing?'Refreshing':'Refresh'}</span></button><span className="live-indicator">System live</span><span className="header-date">{new Date().toLocaleDateString()}</span></div></header>
-      <div className="admin-content">{notice&&<div className="feature-notice">{notice}</div>}{content}</div>
+      <div className="admin-content page-transition" key={page}>{notice&&<div className="feature-notice">{notice}</div>}{loading ? <PortalSkeleton label="Loading admin dashboard" /> : content}</div>
     </section>
     {addStaffOpen&&<AddStaffModal offices={offices} onClose={()=>setAddStaffOpen(false)} onAdd={addStaff}/>} 
     {addOfficeOpen&&<AddOfficeModal onClose={()=>setAddOfficeOpen(false)} onAdd={addOffice}/>} 
     {scheduleMember&&<AdminScheduleModal member={scheduleMember} onClose={()=>setScheduleMember(null)} onSave={saveStaffSchedule}/>} 
+    {editingStaff&&<EditStaffModal member={editingStaff} offices={offices} onClose={()=>setEditingStaff(null)} onSave={saveStaffDetails}/>} 
   </main>
 }
 
 function Mark(){return <img className="admin-mark" src="/campus-queue-logo.png" alt=""/>}
-function NavIcon({ name }){
-  const paths={
-    home:<><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 21v-6h6v6"/></>,
-    queues:<><path d="M4 6h16M4 12h16M4 18h16"/></>,
-    student:<><circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2M9 11l3 3 3-3"/></>,
-    staff:<><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M15 15a5 5 0 0 1 6 4v2"/></>,
-    building:<><path d="M4 21V4h16v17M8 8h1M8 12h1M8 16h1M12 8h1M12 12h1M12 16h1M16 8h1M16 12h1M16 16h1"/></>,
-    star:<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>,
-    trend:<><path d="M5 17 17 5M10 5h7v7"/></>, history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l3 2"/></>,
-    profile:<><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
-}
 function PasswordEye({ visible }){
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/>{visible&&<path d="M4 4 20 20"/>}</svg>
 }
@@ -294,9 +297,14 @@ function OldOfficeManager({ offices,toggleOffice,addRequirement,onAdd }){
   </>
 }
 
-function OfficeManager({ offices, toggleOffice, addRequirement, onDelete, onAdd }) {
+function OfficeManager({ offices, toggleOffice, addRequirement, renameService, onDelete, onAdd }) {
   const [expanded,setExpanded]=useState(offices[0]?.id)
   const [drafts,setDrafts]=useState({})
+  const editService = async (office, index, service) => {
+    const name = window.prompt('Service name', service.name)
+    if (name === null || name.trim() === service.name) return
+    await renameService(office.id, index, name.trim())
+  }
   return <><PageTitle title="Offices & services" subtitle="Control office availability and keep student-facing service requirements accurate." action={<button className="admin-primary" onClick={onAdd}>+ Add office</button>}/><section className="office-manager-list">{offices.map((office)=><article className={expanded===office.id?'expanded':''} key={office.id}><div className="office-manager-head"><button className="office-main-button" onClick={()=>setExpanded(expanded===office.id?null:office.id)}><span>{office.code}</span><div><h2>{office.name}</h2><p>{office.services.length} services · {office.hours}</p></div><em>{expanded===office.id?'−':'+'}</em></button><label className="office-switch"><input type="checkbox" checked={office.open} onChange={()=>toggleOffice(office.id)}/><i/><span>{office.open?'Open':'Closed'}</span></label><button className="office-delete" onClick={()=>onDelete(office)}>Delete</button></div>{expanded===office.id&&<div className="service-manager">{office.services.map((service,index)=><section key={service.name}><div className="service-manager-title"><div><span>SERVICE {index+1}</span><h3>{service.name}</h3></div><em>{service.requirements.length} requirements</em></div><div className="requirements-admin-list">{service.requirements.map((req,reqIndex)=><p key={`${req}-${reqIndex}`}><i>✓</i>{req}</p>)}</div><form onSubmit={(event)=>{event.preventDefault();const key=`${office.id}-${index}`;addRequirement(office.id,index,drafts[key]||'');setDrafts((current)=>({...current,[key]:''}))}}><input value={drafts[`${office.id}-${index}`]||''} onChange={(event)=>setDrafts((current)=>({...current,[`${office.id}-${index}`]:event.target.value}))} placeholder="Add another requirement..."/><button>Add</button></form></section>)}</div>}</article>)}</section></>
 }
 
@@ -328,6 +336,11 @@ function Profile({ user, token, onNameSaved }){
   const [notice,setNotice]=useState('')
   const [passwordVisible,setPasswordVisible]=useState(false)
   const [confirmPasswordVisible,setConfirmPasswordVisible]=useState(false)
+  useEffect(() => {
+    if (!notice) return undefined
+    const timeout = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
   const update=({target})=>setForm((current)=>({...current,[target.name]:target.value}))
   const submit=async(event)=>{event.preventDefault();if(form.password!==form.confirmPassword)return setNotice('Passwords do not match.');try{await portalApi('/api/auth/profile',token,{method:'PATCH',body:JSON.stringify(form)});onNameSaved(form.name.trim());setNotice('Profile saved successfully.');setForm(current=>({...current,password:'',confirmPassword:''}))}catch(error){setNotice(error.message)}}
   return <><PageTitle title="Admin profile" subtitle="Update your administrator account details."/><form className="admin-profile-editor" onSubmit={submit}><div className="admin-profile-heading"><span>{initials(form.name)}</span><div><h2>{form.name}</h2><p>Administrator account</p></div></div><div className="admin-profile-fields"><label>Full name<input name="name" value={form.name} onChange={update} required /></label><label>Email address<input name="email" type="email" value={form.email} onChange={update} required /></label><label className="admin-password-field">Password<span><input name="password" type={passwordVisible ? 'text' : 'password'} value={form.password} onChange={update} placeholder="New password" minLength="8" /><button type="button" onClick={()=>setPasswordVisible((visible)=>!visible)} aria-label={passwordVisible ? 'Hide password' : 'Show password'} title={passwordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={passwordVisible}/></button></span></label><label className="admin-password-field">Confirm password<span><input name="confirmPassword" type={confirmPasswordVisible ? 'text' : 'password'} value={form.confirmPassword} onChange={update} placeholder="Repeat password" minLength="8" /><button type="button" onClick={()=>setConfirmPasswordVisible((visible)=>!visible)} aria-label={confirmPasswordVisible ? 'Hide password' : 'Show password'} title={confirmPasswordVisible ? 'Hide password' : 'Show password'}><PasswordEye visible={confirmPasswordVisible}/></button></span></label></div><div className="admin-profile-footer"><p className={notice.includes('match')?'profile-error':''}>{notice||'Leave passwords blank to keep your current password.'}</p><button className="admin-primary">Save profile</button></div></form></>}
@@ -409,7 +422,10 @@ function StaffScheduleManager({
   reviewStaff,
   onAdd,
   onSchedule,
-  onDelete
+  onDelete,
+  onEdit,
+  onDemote,
+  offices
 }) {
   const [search, setSearch] = useState('');
 
@@ -483,6 +499,10 @@ function StaffScheduleManager({
                 Edit schedule
               </button>
 
+              <button type="button" className="staff-assignment-edit" onClick={() => onEdit(member)}>
+                Edit office & position
+              </button>
+
               {member.status === 'Pending' ? (
                 <div className="staff-review-actions">
                   <button
@@ -516,6 +536,10 @@ function StaffScheduleManager({
                 </button>
               )}
 
+              <button type="button" className="demote-account" onClick={() => onDemote(member)}>
+                Demote to student
+              </button>
+
               <button
                 type="button"
                 className="delete-account"
@@ -537,6 +561,21 @@ function StaffScheduleManager({
   );
 }
 
+
+function EditStaffModal({ member, offices, onClose, onSave }) {
+  const [form, setForm] = useState({ office: member.office || offices[0]?.name || '', staffRole: member.staffRole || 'Service staff' })
+  return <div className="admin-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="edit-staff-title">
+    <form className="admin-modal" onSubmit={(event) => { event.preventDefault(); onSave(member, form) }}>
+      <button type="button" className="admin-modal-close" onClick={onClose} aria-label="Close">×</button>
+      <span className="float-kicker">STAFF ASSIGNMENT</span>
+      <h2 id="edit-staff-title">Edit {member.name}</h2>
+      <p>Update this staff member’s assigned office and working position.</p>
+      <label>Assigned office<select value={form.office} onChange={(event) => setForm((current) => ({ ...current, office: event.target.value }))}>{offices.map((office) => <option key={office.id} value={office.name}>{office.name}</option>)}</select></label>
+      <label>Staff position<select value={form.staffRole} onChange={(event) => setForm((current) => ({ ...current, staffRole: event.target.value }))}><option>Service staff</option><option>Queue officer</option><option>Office assistant</option></select></label>
+      <button className="admin-primary modal-submit">Save assignment</button>
+    </form>
+  </div>
+}
 
 function AuditLogs({ logs }) {
   return <><PageTitle title="Audit logs" subtitle="History of account-management actions performed from this admin console."/><section className="audit-log-card"><div className="audit-log-head"><span>Activity history</span><small>{logs.length} recorded actions</small></div>{logs.length ? logs.map((log)=><article key={log.id}><i>◷</i><div><b>{log.action}</b><p>{log.subject}</p></div><time>{log.time}</time></article>) : <p className="no-data">No account actions have been recorded yet.</p>}</section></>

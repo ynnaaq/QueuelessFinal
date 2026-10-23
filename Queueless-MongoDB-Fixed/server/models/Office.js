@@ -13,6 +13,9 @@ const officeSchema = new mongoose.Schema({
   wait: { type: Number, default: 4, min: 0 },
   sequence: { type: Number, default: 0, min: 0 },
   hours: { type: String, default: '8:00 AM - 5:00 PM' },
+  description: { type: String, default: '', trim: true, maxlength: 240 },
+  icon: { type: String, default: '', trim: true, maxlength: 40 },
+  color: { type: String, default: '', trim: true, maxlength: 20 },
   services: { type: [serviceSchema], default: [] },
 }, { timestamps: true })
 

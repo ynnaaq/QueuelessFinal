@@ -5,13 +5,18 @@ import { supabase } from '../lib/supabase.js'
 const normalize = (email) => String(email || '').trim().toLowerCase()
 
 async function bridgeSession(accessToken) {
-  const response = await fetch('/api/auth/supabase-session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+  let response
+  try {
+    response = await fetch('/api/auth/supabase-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  } catch {
+    throw new Error('Cannot connect to Queueless right now. Your Supabase session is still available; please try again shortly.')
+  }
   const result = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(result.message || 'Unable to link this account to Queueless.')
   return result
@@ -84,4 +89,9 @@ export async function updateSupabasePassword(email, _code, password) {
   recoveredEmail = null
   await supabase.auth.signOut({ scope: 'local' })
   return { message: 'Password updated.' }
+}
+
+export async function signOutFromSupabase() {
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) throw error
 }
