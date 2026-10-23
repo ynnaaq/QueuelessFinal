@@ -10,6 +10,7 @@ import Session from './models/Session.js'
 import Feedback from './models/Feedback.js'
 import Schedule from './models/Schedule.js'
 import PromotionInvitation from './models/PromotionInvitation.js'
+import AuditLog from './models/AuditLog.js'
 import { sendEmailOtp } from './emailService.js'
 
 
@@ -20,7 +21,7 @@ const activeStatuses = [
 ]
 
 const sessionLifetimeMs =
-  7 * 24 * 60 * 60 * 1000
+  5 * 60 * 1000
 
 const passwordResetLifetimeMs =
   10 * 60 * 1000
@@ -1289,11 +1290,43 @@ export function createApp({
     '/api/health',
     null,
 
-    async () => ({
-      ok: true,
-      database:
-        'mongodb',
-    })
+    async () => {
+      const connected = mongoose.connection.readyState === 1
+      if (!connected) fail('Database is unavailable.', 503)
+      return { ok: true, database: 'mongodb', status: 'connected' }
+    }
+  )
+
+  route(
+    'get',
+    '/api/admin/audit-logs',
+    ['admin'],
+    async () => {
+      const logs = await AuditLog.find().sort({ createdAt: -1 }).limit(250)
+      return {
+        logs: logs.map(log => ({
+          id: String(log._id),
+          action: log.action,
+          subject: log.subject,
+          time: log.createdAt,
+          createdAt: log.createdAt,
+        })),
+      }
+    }
+  )
+
+  route(
+    'post',
+    '/api/admin/audit-logs',
+    ['admin'],
+    async ({ body, user }) => {
+      const log = await AuditLog.create({
+        actorId: user._id,
+        action: text(body.action, 'Audit action', 160),
+        subject: text(body.subject, 'Audit subject', 200),
+      })
+      return { status: 201, data: { log: { id: String(log._id), action: log.action, subject: log.subject, time: log.createdAt } } }
+    }
   )
 
 
@@ -1910,6 +1943,9 @@ if (body.privacyConsent !== true) {
         open: true,
         sequence: 0,
         hours: '8:00 AM - 5:00 PM',
+      description: typeof body.description === 'string' ? body.description.trim().slice(0, 240) : '',
+      icon: typeof body.icon === 'string' ? body.icon.trim().slice(0, 40) : '',
+      color: typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color) ? body.color : '',
         services: [{ name: service, requirements: ['Valid school ID'] }],
       })
 
@@ -2841,8 +2877,9 @@ if (body.privacyConsent !== true) {
         )
 
 
-      const ticket =
-        await Ticket.create({
+      let ticket
+      try {
+        ticket = await Ticket.create({
           ticketNumber:
             `${office.code}-${String(
               updatedOffice.sequence
@@ -2868,6 +2905,15 @@ if (body.privacyConsent !== true) {
           order:
             Date.now(),
         })
+      } catch (error) {
+        // The partial unique index on studentId makes the active-ticket rule
+        // safe under concurrent requests. Translate its driver error to the
+        // same stable API response used by the earlier pre-flight check.
+        if (error?.code === 11000 && error?.keyPattern?.studentId) {
+          fail('You already have an active ticket.', 409)
+        }
+        throw error
+      }
 
 
       const line =
@@ -3563,6 +3609,24 @@ if (body.privacyConsent !== true) {
     }
   )
 
+  route(
+    'patch',
+    '/api/offices/:officeId/services/:serviceIndex',
+    ['admin'],
+    async ({ req, body }) => {
+      const office = await findOffice(req.params.officeId)
+      const index = Number(req.params.serviceIndex)
+      if (!Number.isInteger(index) || !office.services[index]) fail('Service not found.', 404)
+      const name = text(body.name, 'Service name', 100)
+      if (office.services.some((service, serviceIndex) => serviceIndex !== index && service.name.toLowerCase() === name.toLowerCase())) {
+        fail('A service with that name already exists for this office.', 409)
+      }
+      office.services[index].name = name
+      await office.save()
+      return { office: apiOffice(office) }
+    }
+  )
+
 
   route(
     'post',
@@ -3816,6 +3880,42 @@ if (body.privacyConsent !== true) {
         user:
           publicUser(user),
       }
+    }
+  )
+
+  route(
+    'patch',
+    '/api/admin/staff/:id',
+    ['admin'],
+    async ({ req, body }) => {
+      const staffMember = await User.findOne({ _id: req.params.id, role: 'staff', deletedAt: null })
+      if (!staffMember) fail('Staff account not found.', 404)
+      const office = text(body.office, 'Office', 80)
+      const staffRole = text(body.staffRole, 'Staff position', 80)
+      const officeRecord = await Office.findOne({ name: office, deletedAt: null })
+      if (!officeRecord) fail('Selected office was not found.', 404)
+      staffMember.office = officeRecord.name
+      staffMember.staffRole = staffRole
+      await staffMember.save()
+      return { user: publicUser(staffMember) }
+    }
+  )
+
+  route(
+    'post',
+    '/api/admin/staff/:id/demote',
+    ['admin'],
+    async ({ req }) => {
+      const staffMember = await User.findOne({ _id: req.params.id, role: 'staff', deletedAt: null })
+      if (!staffMember) fail('Staff account not found.', 404)
+      staffMember.role = 'student'
+      staffMember.roles = ['student']
+      staffMember.office = ''
+      staffMember.staffRole = ''
+      staffMember.schedule = []
+      await staffMember.save()
+      await Session.deleteMany({ userId: staffMember._id })
+      return { user: publicUser(staffMember) }
     }
   )
 

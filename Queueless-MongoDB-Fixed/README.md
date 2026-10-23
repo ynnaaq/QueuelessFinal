@@ -69,7 +69,7 @@ Authenticated requests use `Authorization: Bearer <token>` and JSON bodies. Erro
 | POST | /api/admin/staff | Admin; name, email, password, office |
 | PATCH | /api/admin/users/:id | Admin; status Active, Suspended (student), or Inactive (staff) |
 
-Sessions last seven days and survive API restarts. Passwords use salted scrypt hashes; only hashes of session tokens are stored. Suspension revokes sessions and cancels active student tickets. Password changes revoke other sessions. Authentication endpoints are rate limited.
+Sessions last five minutes and survive API restarts. Passwords use salted scrypt hashes; only hashes of session tokens are stored. Suspension revokes sessions and cancels active student tickets. Password changes revoke other sessions. Authentication endpoints are rate limited.
 
 ## Storage and verification
 
