@@ -298,6 +298,9 @@ export default function Login({ onLogin }) {
     setMessage,
   ] = useState('')
 
+  const isSuccessMessage =
+    /(?:verified successfully|code verified|password was updated|verification email has been sent|check your school email)/i.test(message)
+
   const [
     remember,
     setRemember,
@@ -836,7 +839,7 @@ export default function Login({ onLogin }) {
 
               {message && (
                 <p
-                  className="signin-message"
+                  className={`signin-message ${isSuccessMessage ? 'is-success' : ''}`}
                   role="status"
                 >
                   {message}
@@ -1085,7 +1088,7 @@ export default function Login({ onLogin }) {
 
               {message && (
                 <p
-                  className="signin-message"
+                  className={`signin-message ${isSuccessMessage ? 'is-success' : ''}`}
                   role="status"
                 >
                   {message}
@@ -1441,7 +1444,7 @@ export default function Login({ onLogin }) {
 
               {message && (
                 <p
-                  className="signin-message"
+                  className={`signin-message ${isSuccessMessage ? 'is-success' : ''}`}
                   role="status"
                 >
                   {message}

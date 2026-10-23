@@ -647,6 +647,10 @@
   text-align: center;
 }
 
+.signin-message.is-success {
+  color: #198754;
+}
+
 .demo-wrap {
   margin-top: 22px;
   padding-top: 20px;
